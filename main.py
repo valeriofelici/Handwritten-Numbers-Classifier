@@ -15,6 +15,8 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader, random_split, IterableDataset, TensorDataset
 from torch import optim
+import os
+from PIL import Image, ImageOps
 
 
 # FUNZIONE PER IL DOWNLOAD DEI DATI
@@ -54,6 +56,7 @@ def download_data(folder):
     training_set, validation_set = random_split(training_set, [50000, 10000])
 
     return training_set, validation_set, test_set
+
 
 class Classifier:
     """Classificatore per la predizione su immagini di numeri scritti a mano."""
@@ -98,19 +101,19 @@ class Classifier:
         # Data augmentation sui dati per il validation e per il test (qua sono trasformazioni fisse)
 
         self.preprocess_eval = [transforms.ToTensor(),
-                              transforms.Compose([
-                                  transforms.RandomRotation(degrees=(15, 15)),
-                                  transforms.ToTensor(),
-                              ]),
-                              transforms.Compose([
-                                  transforms.RandomRotation(degrees=(-15, -15)),
-                                  transforms.ToTensor(),
-                              ]),
-                              transforms.Compose([
-                                  transforms.RandomAffine(degrees=0, scale=(0.95, 0.95)),
-                                  transforms.ToTensor(),
-                              ])
-                              ]
+                                transforms.Compose([
+                                    transforms.RandomRotation(degrees=(15, 15)),
+                                    transforms.ToTensor(),
+                                ]),
+                                transforms.Compose([
+                                    transforms.RandomRotation(degrees=(-15, -15)),
+                                    transforms.ToTensor(),
+                                ]),
+                                transforms.Compose([
+                                    transforms.RandomAffine(degrees=0, scale=(0.95, 0.95)),
+                                    transforms.ToTensor(),
+                                ])
+                                ]
 
         # Spostamento della rete nella memoria del dispositivo corretto
         self.net.to(self.device)
@@ -127,7 +130,7 @@ class Classifier:
     def load(self, nome_file):
         """Carica il classificatore."""
 
-        self.net.load_state_dict(torch.load(nome_file, map_location=self.device))   # Metodo messo a disposizione da Pytorch
+        self.net.load_state_dict(torch.load(nome_file, map_location=self.device))   # Metodo messo a disposizione da PyTorch
 
     # FUNZIONE PER IL CALCOLO DELL'OUTPUT DELLA RETE CON E SENZA FUNZIONE DI ATTIVAZIONE????
 
@@ -139,7 +142,7 @@ class Classifier:
 
         return output_net_no_act, output_net
 
-    #def decision(self): # POTREBBE NON SERVIRE!!!!!!!!!!
+    # def decision(self): # POTREBBE NON SERVIRE!!!!!!!!!!
 
     # FUNZIONE DI VALUTAZIONE DEL MODELLO
 
@@ -155,8 +158,8 @@ class Classifier:
         """
 
         # Inizializzazione elementi
-        correct = 0 # contatore predizioni corrette
-        tot_esempi = 0 # contatore esempi totali
+        correct = 0  # contatore predizioni corrette
+        tot_esempi = 0  # contatore esempi totali
 
         # Ciclo sui 4 subset che compongono il validation set
 
@@ -167,16 +170,16 @@ class Classifier:
             # Ciclo sui batch di dati (batch mode)
             for i, (images, labels) in enumerate(validation_set):
 
-                #images = images.cuda()  # ???????????????????
+                # images = images.cuda()  # ???????????????????
                 output_net_no_act, output_net = self.forward(images)    # Calcolo dell' output della rete
                 predictions = torch.argmax(output_net, dim=1)   # La predizione sarà relativa all'output più alto della rete
-                predictions = predictions.data.cpu()    # ????????????????????????
+                # predictions = predictions.data.cpu()    # ????????????????????????
                 correct += torch.sum(predictions == labels)  # Incrementa il totale delle predizioni corrette
-                tot_esempi += output_net_no_act.size(0) # Incrementa il totale degli esempi presentati
+                tot_esempi += output_net_no_act.size(0)  # Incrementa il totale degli esempi presentati
 
         correct = correct*100./tot_esempi    # Calcolo percentuale
 
-        # Ripristino dei dati alle trasformazioni randomiche usate per il training
+        # Ripristino dei dati alle trasformazioni casuali usate per il training
         validation_set.dataset.transform = self.preprocess_train
 
         return correct
@@ -190,9 +193,9 @@ class Classifier:
         best_epoch = -1     # Epoca in cui è stata ottenuta la precisione maggiore
         best_accuracy = -1  # Precisione maggiore ottenuta
         accuracy = -1   # Memorizza il valore della percentuale di precisione ottenuta
-        accuracies = [] # Memorizza le percentuali di precisione ottenute nell' addestramento (per il grafico finale)
+        accuracies = []  # Memorizza le percentuali di precisione ottenute nell' addestramento (per il grafico finale)
 
-        self.net.to(self.device) #???????????????????
+        self.net.to(self.device)  # ???????????????????
 
         # Controllo che la rete sia in 'modalità addestramento'
         self.net.train()
@@ -202,6 +205,7 @@ class Classifier:
 
         # Scelta della loss function (Cross Entropy Loss)
         loss_function = nn.CrossEntropyLoss()
+        losses = []     # Memorizza i valori assunti dalla loss function
 
         # Ciclo sulle epoche
         for e in range(epoche):
@@ -219,10 +223,10 @@ class Classifier:
 
                 # Calcolo della loss function
                 loss = loss_function(predictions, labels)   # Calcolo della loss function con classi predette e classi corrette
-
+                losses.append(loss.item())
                 # Calcolo gradienti e aggiornamento dei pesi della rete
-                optimizer.zero_grad()   # Azzeramento delle aree di memoria in cui erano stati inseriti i gradienti calcolati in precedenza
-                loss.backward() # Backpropagation
+                optimizer.zero_grad()   # Azzeramento aree di memoria in cui erano stati inseriti i gradienti calcolati in precedenza
+                loss.backward()  # Backpropagation
                 optimizer.step()   # Aggiornamento pesi (valori contenuti nei filtri di convoluzione)
 
             # Passaggio alla fase di valutazione della rete
@@ -234,7 +238,7 @@ class Classifier:
             # Ritorno alla modalità di addestramento
             self.net.train()
 
-            # Stampa statistiche ottenute su ciscuna epoca
+            # Stampa statistiche ottenute su ciascuna epoca
             print("Epoca: ", e+1, "Precisione: ", round(accuracy, 4), "%")
 
             # Controllo che sia stato raggiunto il valore max della precisione tra quelli ottenuti fino ad adesso
@@ -244,7 +248,14 @@ class Classifier:
                 print("Salvataggio del miglior modello: ", round(accuracy, 4), "% \n")
 
         # Stampa del grafico relativo alla precisione della rete
-        plt.plot(accuracies)
+
+        fig, axs = plt.subplots(2)
+        fig.suptitle("Grafici")
+        axs[0].plot(accuracies)
+        axs[1].plot(losses)
+        #plt.plot(accuracies)
+        #plt.show()
+        #plt.plot(losses)
         plt.show()
 
 # ENTRY POINT
@@ -258,7 +269,7 @@ if __name__ == "__main__":
 
     # Conversione del dataset in data loaders
 
-    dim_batch = 64  # dimensione massima dei batch !!!VERRA' DATA DA LINEA DI COMANDO!!!
+    dim_batch = 1  # dimensione massima dei batch !!! VERRA' DATA DA LINEA DI COMANDO!!!
 
     train_dataloader = DataLoader(train_data,
                                   batch_size=dim_batch,
@@ -269,4 +280,27 @@ if __name__ == "__main__":
                                 shuffle=True)
 
     c = Classifier()    # istanza di classificatore
-    c.train_classifier(0.001, 5)   # lr=0.001 epoche= 10
+    #c.train_classifier(0.001, 5)   # lr=0.001 epoche= 10
+
+    c.load('classificatore.pth')
+    # Apertura immagine
+    image = Image.open("prova.jpeg")
+
+    # Ridimensionamento immagine in 28x28
+    new_image = image.resize((28, 28))
+
+    # Conversione da RGB a Grayscale ad un solo canale
+    new_image1 = ImageOps.grayscale(new_image)
+    new_image1 = ImageOps.invert(new_image1)
+
+    new_image1.save(fp="nuovo.jpg")
+    conv = transforms.PILToTensor()
+    new_image2 = conv(new_image1)
+    new_image2 = new_image2 / 255
+    print(new_image2)
+    plt.imshow(new_image2[0][:][:], cmap='gray')
+    #plt.show()
+    a, b = c.forward(new_image2[None, :, :])
+    print("\nIl numero disegnato è: ", torch.argmax(b, dim=1).item())
+
+
