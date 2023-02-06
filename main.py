@@ -302,3 +302,4 @@ if __name__ == "__main__":
     #plt.show()
     a, b = c.forward(new_image2[None, :, :])
     print("\nIl numero disegnato è: ", torch.argmax(b, dim=1).item())
+
