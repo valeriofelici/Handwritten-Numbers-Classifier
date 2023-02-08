@@ -135,7 +135,7 @@ class Classifier:
     # FUNZIONE PER IL CALCOLO DELL'OUTPUT DELLA RETE CON E SENZA FUNZIONE DI ATTIVAZIONE????
 
     def forward(self, x):
-        """Calcola l' output della rete"""
+        """Calcola l'output della rete"""
 
         output_net_no_act = self.net(x)  # Output della rete senza attivazione??? SERVE????
         output_net = torch.softmax(output_net_no_act, dim=1)    # Output dopo la funzione di attivazione (softmax in questo caso)
@@ -385,7 +385,7 @@ if __name__ == "__main__":
 
     # Conversione del dataset in data loaders
 
-    dim_batch = 1  # dimensione massima dei batch !!! VERRA' DATA DA LINEA DI COMANDO!!!
+    dim_batch = 64  # dimensione massima dei batch !!! VERRA' DATA DA LINEA DI COMANDO!!!
 
     train_dataloader = DataLoader(train_data,
                                   batch_size=dim_batch,
@@ -396,7 +396,7 @@ if __name__ == "__main__":
                                 shuffle=True)
 
     c = Classifier()    # istanza di classificatore
-    c.train_classifier(0.001, 5)   # lr=0.001 epoche= 10
+    #c.train_classifier(0.001, 15)   # lr=0.001 epoche= 10
 
     c.load('classificatore.pth')
     # Apertura immagine
@@ -432,14 +432,14 @@ if __name__ == "__main__":
 
 
 
-    # risultati = segment_image("long5.jpeg")
-    # digit = ""
-    #
-    # for i in range(len(risultati)):
-    #     a, b = c.forward(risultati[i][None, :, :])
-    #     d = torch.argmax(b, dim=1).item()
-    #     digit += str(d)
-    #
-    # print("\n\nIl numero in foto è: ", int(digit))
+    risultati = segment_image("long5.jpeg")
+    digit = ""
+
+    for i in range(len(risultati)):
+        a, b = c.forward(risultati[i][None, :, :])
+        d = torch.argmax(b, dim=1).item()
+        digit += str(d)
+
+    print("\n\nIl numero in foto è: ", int(digit))
 
 
