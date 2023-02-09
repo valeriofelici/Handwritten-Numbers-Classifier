@@ -8,6 +8,7 @@ import copy
 import numpy as np
 import torch
 import torchvision
+import argparse
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
@@ -18,6 +19,10 @@ from torch import optim
 import os
 from PIL import Image, ImageOps
 
+# Parametri che verranno specificati da linea di comando
+LR = None
+EPOCHE = None
+BATCH_SIZE = None
 
 # FUNZIONE PER IL DOWNLOAD DEI DATI
 
@@ -263,16 +268,16 @@ class Classifier:
 def blacken_pixel(image):
     """Annerisce i pixel dell'immagine in input che hanno un livello di luminosità sotto la soglia di 0.6."""
 
-    soglia = 0.6    # soglia sotto la quale un pixel viene considerato spento
+    soglia = 0.2    # soglia sotto la quale un pixel viene considerato spento
 
     # Loop sui pixels dell'immagine (tensore con elementi compresi tra 0 e 1)
     for i in range(image.size(1)):
 
         for j in range(image.size(2)):
 
-            if image[0][i][j] < soglia:
+            if image[0][i][j] > 0:
 
-                image[0][i][j] = 0
+                image[0][i][j] = 1
 
     return image
 
@@ -368,7 +373,7 @@ def segment_image(image):
         sub_images[i] = sub_images[i].resize((28, 28))
         sub_images[i] = pil_tensor(sub_images[i])
         sub_images[i] = sub_images[i]/255   # Normalizzazione tra 0 e 1
-        #sub_images[i] = blacken_pixel(sub_images[i])    # Annerimento pixels sotto la soglia 0.6
+        sub_images[i] = blacken_pixel(sub_images[i])    # Annerimento pixels sotto la soglia 0.6
         #sub_images[i] = tensor_pil(sub_images[i])
 
     return sub_images
@@ -379,26 +384,92 @@ def segment_image(image):
 
 if __name__ == "__main__":
 
-    # Download dataset MNIST
+    # Istruzioni da linea di comando
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mode", help="Specificare la modalità tra: addestramento(train), valutazione(evaluation)", choices=['train', 'eval'])
+    parser.add_argument("--lr", default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
+    parser.add_argument("--epoche", default=15, help="Specificare il numero di epoche per l'addestramento (default: 15)")
+    parser.add_argument("--batch_size", default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
+    parser.add_argument("--device", choices=['cpu', 'cuda'], default='cuda', help='Specificare il device da usare (default:cuda)')
+    args = parser.parse_args()
 
+    # VALUTAZIONI ISTRUZIONI DA LINEA DI COMANDO
+    LR = float(args.lr)
+    EPOCHS = int(args.epoche)
+    BATCH_SIZE = int(args.batch_size)
+
+    # DOWNLOAD DATASET MNIST NELLA CARTELLA 'dataset' SE NON GIA' PRESENTE
     train_data, val_data, test_data = download_data("dataset")
 
     # Conversione del dataset in data loaders
-
-    dim_batch = 64  # dimensione massima dei batch !!! VERRA' DATA DA LINEA DI COMANDO!!!
-
     train_dataloader = DataLoader(train_data,
-                                  batch_size=dim_batch,
+                                  batch_size=BATCH_SIZE,
                                   shuffle=True)    # rimescola i dati
 
     val_dataloader = DataLoader(val_data,
-                                batch_size=dim_batch,
+                                batch_size=BATCH_SIZE,
                                 shuffle=True)
 
-    c = Classifier()    # istanza di classificatore
-    #c.train_classifier(0.001, 15)   # lr=0.001 epoche= 10
+    test_dataloader = DataLoader(test_data,
+                                 batch_size=10000,
+                                 shuffle=False)
 
-    c.load('classificatore.pth')
+    # Selezione del device corretto
+    if (args.device == 'cuda') & (torch.cuda.is_available()):
+        device = 'cuda:0'
+        print('\nDevice: GPU')
+    else:
+        device = 'cpu'
+        print('\nDevice: CPU')
+
+    # Modalità training...
+    if args.mode == 'train':
+
+        print('Training classifier...')
+
+        # Creazione di un nuovo classificatore
+        classificatore = Classifier(args.device)
+
+        # Addestramento del classificatore
+        classificatore.train_classifier(LR, EPOCHS)
+
+        # Caricamento del modello con cui sono stati ottenuti i risultati migliori sul validation_set
+        print('Addestramento completato, caricamento del miglior modello...')
+        classificatore.load('classificatore.pth')
+
+        # Valutazione delle prestazioni del modello sui 3 dataset
+        train_acc = classificatore.eval_classifier(train_dataloader)
+        val_acc = classificatore.eval_classifier(val_dataloader)
+        test_acc = classificatore.eval_classifier(test_dataloader)
+
+        # Stampa risultati ottenuti sui 3 dataset
+        print('Accuracy sul training set: ', round(train_acc.item(), 2), '%')
+        print('Accuracy sul validation set: ', round(val_acc.item(), 2), '%')
+        print('Accuracy sul test set: ', round(test_acc.item(), 2), '%')
+
+    elif args.mode == 'eval':
+
+        print('Valutazione classificatore...')
+
+        # Creazione nuovo classificatore
+        classificatore = Classifier(args.device)
+
+        # Caricamento classificatore
+        classificatore.load('classificatore.pth')
+
+        # Valutazione del modello sul test set
+        test_acc = classificatore.eval_classifier(test_dataloader)
+
+        # Stampa risultati ottenuti
+        print('Accuracy sul test set: ', round(test_acc.item(), 2), '%')
+
+    # c = Classifier()    # istanza di classificatore
+    # #c.train_classifier(0.001, 15)   # lr=0.001 epoche= 10
+    #
+    # c.load('classificatore.pth')
+    # cor = c.eval_classifier(test_dataloader)
+    # print(cor)
+
     # Apertura immagine
     # image = Image.open("difficile.jpeg")
     #
@@ -429,17 +500,19 @@ if __name__ == "__main__":
     # a, b = c.forward(new_image2[None, :, :])
     # print("\nIl numero disegnato è: ", torch.argmax(b, dim=1).item())
 
-
-
-
-    risultati = segment_image("long5.jpeg")
-    digit = ""
-
-    for i in range(len(risultati)):
-        a, b = c.forward(risultati[i][None, :, :])
-        d = torch.argmax(b, dim=1).item()
-        digit += str(d)
-
-    print("\n\nIl numero in foto è: ", int(digit))
+    # risultati = segment_image("long6312.jpeg")
+    # digit = ""
+    #
+    # conv = transforms.ToPILImage()
+    #
+    # for i in range(len(risultati)):
+    #     a, b = c.forward(risultati[i][None, :, :])
+    #     d = torch.argmax(b, dim=1).item()
+    #     digit += str(d)
+    #     risultati[i] = conv(risultati[i])
+    #     plt.imshow(risultati[i], cmap='gray')
+    #     plt.show()
+    #
+    # print("\n\nIl numero in foto è: ", int(digit))
 
 
