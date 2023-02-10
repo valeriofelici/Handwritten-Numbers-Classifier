@@ -24,8 +24,8 @@ LR = None
 EPOCHE = None
 BATCH_SIZE = None
 
-# FUNZIONE PER IL DOWNLOAD DEI DATI
 
+# FUNZIONE PER IL DOWNLOAD DEI DATI
 def download_data(folder):
     """Download del dataset MNIST nella cartella 'folder' (se non è già presente).
 
@@ -263,6 +263,129 @@ class Classifier:
         #plt.plot(losses)
         plt.show()
 
+    # FUNZIONE DI SEGMENTAZIONE IMMAGINI
+    def segment_image(self, image):
+        """Segmenta l'immagine in tante immagini quante sono le cifre scritte a mano. Ogni immagine rappresenta l'area in cui è contenuta
+        ciascuna cifra.
+
+        Args:
+            image: nome dell'immagine da segmentare
+
+        Returns:
+            sub_images: tensore contenente le sotto-immagini relative a ciascuna cifra
+        """
+
+        # Apertura immagine
+        immagine = Image.open(image)
+
+        # Operazioni sull'immagine
+        immagine = ImageOps.grayscale(immagine)  # Passaggio a scala di grigi (1 canale)
+        immagine = ImageOps.invert(immagine)  # Inversione colori immagine (in accordo con il dataset MNIST)
+        # plt.imshow(immagine, cmap='gray')
+        # plt.show()
+        # Definizione variabili per passaggio da PIL a Tensore e viceversa
+        pil_tensor = transforms.PILToTensor()
+        tensor_pil = transforms.ToPILImage()
+
+        immagine_tensore = pil_tensor(immagine)
+        immagine_tensore = immagine_tensore / 255  # Normalizzazione tra 0 e 1
+
+        # Inizializzazione variabili
+        colonna = 0  # Rappresenta la colonna relativa all'inizio dell'area in cui è contenuta una cifra (estremo sx area)
+        count_cifre = 0  # Contatore delle cifre individuate nell'immagine
+        sub_images = []  # Tensore con le sotto-immagini relative a ciascuna cifra
+        limite_sup = 0
+        limite_inf = 0
+        end_number = 0
+
+        # Definizione variabile soglia
+        soglia = 0.75  # Soglia sotto la quale un pixel viene considerato spento
+
+        # Rimozione bianco sopra e sotto
+        for i in range(immagine_tensore.size(1)):  # Scorre le righe
+
+            for j in range(immagine_tensore.size(2)):  # Scorre le colonne
+
+                if (limite_sup == 0) & (immagine_tensore[0][i][j] > soglia):  # limite superiore trovato
+
+                    limite_sup = i - 35
+                    break
+
+                if (limite_sup != 0) & (immagine_tensore[0][i][j] > soglia):  # limite inferiore trovato
+
+                    break
+
+                if (limite_sup != 0) & (j == (immagine_tensore.size(2) - 1)):
+                    limite_inf = i + 35
+                    end_number = 1
+                    break
+
+            if end_number == 1:
+                break
+
+        # Eliminazione bordi superiori e inferiori immagine
+        immagine_tensore = immagine_tensore[:, limite_sup:limite_inf, :]
+
+        # Loop sui pixels dell'immagine, scorrendo per colonne
+        for j in range(immagine_tensore.size(2)):  # Scorre le colonne
+
+            for i in range(immagine_tensore.size(1)):  # Scorre le righe
+
+                # if immagine[0][i][j] < 0.6:     # azzera i pixel poco luminosi (rumore?)
+                #     immagine[0][i][j] = 0
+
+                if (colonna == 0) & (immagine_tensore[0][i][j] > soglia):  # inizia il digit
+                    # salva la colonna
+                    colonna = j - 35  # lascio un po' di spazio di pixels come bordo sx
+                    break  # passa alla colonna successiva
+
+                if (colonna != 0) & (immagine_tensore[0][i][j] > soglia):  # non è finito il digit
+                    break  # passa alla colonna successiva
+
+                if (colonna != 0) & (immagine_tensore[0][i][j] < soglia) & (i == (immagine_tensore.size(1) - 1)):  # è finito il digit
+                    count_cifre += 1  # incremento il contatore dei digit trovati
+                    # creazione sezione digit trovato
+                    sub_images.append(immagine_tensore[0, :, colonna:j + 35])  # Salvataggio del tensore relativo all'area trovata
+                    colonna = 0  # si azzera una volta definito l'estremo dx dell'area della cifra
+
+        digit = ''  # Stringa che sarà composta dalle predizioni su ogni cifra
+
+        # Loop sulle sotto-immagini per passare da tensore a PIL, per passare alla dimensione (28x28) e tornare a tensore
+        for i in range(len(sub_images)):
+            sub_images[i] = tensor_pil(sub_images[i])
+            sub_images[i] = sub_images[i].resize((28, 28))
+            sub_images[i] = pil_tensor(sub_images[i])
+            sub_images[i] = sub_images[i] / 255  # Normalizzazione tra 0 e 1
+            sub_images[i] = blacken_pixel(sub_images[i])  # Annerimento pixels sotto la soglia 0.6
+            # sub_images[i] = tensor_pil(sub_images[i])
+
+            a, b = self.forward(sub_images[i][None, :, :])
+            d = torch.argmax(b, dim=1).item()
+            digit += str(d)
+
+        # print("\n\nIl numero in foto è: ", int(digit))
+
+        return digit
+
+    # FUNZIONE PER LA PREDIZIONE DI CIFRE IN IMMAGINI PRESENTI IN UNA CARTELLA
+    def eval_pics(self, cartella):
+        """Effettua delle predizioni su immagini contenute in una cartella.
+
+        Args:
+            cartella: percorso della cartella
+
+        """
+
+        pics_list = next(os.walk(cartella))[2]  # lista contenente i nomi delle immagini nella cartella
+        print('La cartella contiene le seguenti immagini:', pics_list)
+
+        # Loop sulle immagini
+        for i in range(len(pics_list)):
+            digit = self.segment_image(cartella + '/' + pics_list[i])
+            print('Il numero scritto nella foto', pics_list[i], 'è:', digit)
+
+
+
 
 # FUNZIONE DI ANNERIMENTO PIXELS
 def blacken_pixel(image):
@@ -281,116 +404,17 @@ def blacken_pixel(image):
 
     return image
 
-
-# FUNZIONE DI SEGMENTAZIONE IMMAGINI
-def segment_image(image):
-    """Segmenta l'immagine in tante immagini quante sono le cifre scritte a mano. Ogni immagine rappresenta l'area in cui è contenuta
-    ciascuna cifra.
-
-    Args:
-        image: nome dell'immagine da segmentare
-
-    Returns:
-        sub_images: tensore contenente le sotto-immagini relative a ciascuna cifra
-    """
-
-    # Apertura immagine
-    immagine = Image.open(image)
-
-    # Operazioni sull'immagine
-    immagine = ImageOps.grayscale(immagine)   # Passaggio a scala di grigi (1 canale)
-    immagine = ImageOps.invert(immagine)    # Inversione colori immagine (in accordo con il dataset MNIST)
-    #plt.imshow(immagine, cmap='gray')
-    #plt.show()
-    # Definizione variabili per passaggio da PIL a Tensore e viceversa
-    pil_tensor = transforms.PILToTensor()
-    tensor_pil = transforms.ToPILImage()
-
-    immagine_tensore = pil_tensor(immagine)
-    immagine_tensore = immagine_tensore/255     # Normalizzazione tra 0 e 1
-
-    # Inizializzazione variabili
-    colonna = 0     # Rappresenta la colonna relativa all'inizio dell'area in cui è contenuta una cifra (estremo sx area)
-    count_cifre = 0     # Contatore delle cifre individuate nell'immagine
-    sub_images = []     # Tensore con le sotto-immagini relative a ciascuna cifra
-    limite_sup = 0
-    limite_inf = 0
-    end_number = 0
-
-    # Definizione variabile soglia
-    soglia = 0.75    # Soglia sotto la quale un pixel viene considerato spento
-
-    # Rimozione bianco sopra e sotto
-    for i in range(immagine_tensore.size(1)):  # Scorre le righe
-
-        for j in range(immagine_tensore.size(2)):  # Scorre le colonne
-
-            if (limite_sup == 0) & (immagine_tensore[0][i][j] > soglia):  # limite superiore trovato
-
-                limite_sup = i - 35
-                break
-
-            if (limite_sup != 0) & (immagine_tensore[0][i][j] > soglia):  # limite inferiore trovato
-
-                break
-
-            if (limite_sup != 0) & (j == (immagine_tensore.size(2) - 1)):
-                limite_inf = i + 35
-                end_number = 1
-                break
-
-        if end_number == 1:
-            break
-
-    # Eliminazione bordi superiori e inferiori immagine
-    immagine_tensore = immagine_tensore[:, limite_sup:limite_inf, :]
-
-    # Loop sui pixels dell'immagine, scorrendo per colonne
-    for j in range(immagine_tensore.size(2)):   # Scorre le colonne
-
-        for i in range(immagine_tensore.size(1)):   # Scorre le righe
-
-            # if immagine[0][i][j] < 0.6:     # azzera i pixel poco luminosi (rumore?)
-            #     immagine[0][i][j] = 0
-
-            if (colonna == 0) & (immagine_tensore[0][i][j] > soglia):   # inizia il digit
-                # salva la colonna
-                colonna = j-35  # lascio un po' di spazio di pixels come bordo sx
-                break   # passa alla colonna successiva
-
-            if (colonna != 0) & (immagine_tensore[0][i][j] > soglia):   # non è finito il digit
-                break   # passa alla colonna successiva
-
-            if (colonna != 0) & (immagine_tensore[0][i][j] < soglia) & (i == (immagine_tensore.size(1)-1)):   # è finito il digit
-                count_cifre += 1  # incremento il contatore dei digit trovati
-                # creazione sezione digit trovato
-                sub_images.append(immagine_tensore[0, :, colonna:j+35])    # Salvataggio del tensore relativo all'area trovata
-                colonna = 0     # si azzera una volta definito l'estremo dx dell'area della cifra
-
-    # Loop sulle sotto-immagini per passare da tensore a PIL, per passare alla dimensione (28x28), tornare a tensore e annerire pixels
-    for i in range(len(sub_images)):
-        sub_images[i] = tensor_pil(sub_images[i])
-        sub_images[i] = sub_images[i].resize((28, 28))
-        sub_images[i] = pil_tensor(sub_images[i])
-        sub_images[i] = sub_images[i]/255   # Normalizzazione tra 0 e 1
-        sub_images[i] = blacken_pixel(sub_images[i])    # Annerimento pixels sotto la soglia 0.6
-        #sub_images[i] = tensor_pil(sub_images[i])
-
-    return sub_images
-
-
 # ENTRY POINT
-
-
 if __name__ == "__main__":
 
     # Istruzioni da linea di comando
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", help="Specificare la modalità tra: addestramento(train), valutazione(evaluation)", choices=['train', 'eval'])
+    parser.add_argument("mode", help="Specificare la modalità tra: addestramento(train), valutazione(evaluation), predizione immagini(eval_pics)", choices=['train', 'eval', 'eval_pics'])
     parser.add_argument("--lr", default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
     parser.add_argument("--epoche", default=15, help="Specificare il numero di epoche per l'addestramento (default: 15)")
     parser.add_argument("--batch_size", default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
     parser.add_argument("--device", choices=['cpu', 'cuda'], default='cuda', help='Specificare il device da usare (default:cuda)')
+    parser.add_argument('--folder', default=None, help='Specificare il nome della cartella in cui sono contenute le immagini (default: None)')
     args = parser.parse_args()
 
     # VALUTAZIONI ISTRUZIONI DA LINEA DI COMANDO
@@ -462,6 +486,24 @@ if __name__ == "__main__":
 
         # Stampa risultati ottenuti
         print('Accuracy sul test set: ', round(test_acc.item(), 2), '%')
+
+    elif args.mode == 'eval_pics':
+
+        if args.folder is None:
+            print('SPECIFICARE IL NOME DELLA CARTELLA IN CUI SONO CONTENUTE LE IMMAGINI!')
+
+        else:
+            print('Predizione dell immagini nella cartella: ', args.folder)
+
+            # Creazione nuovo classificatore
+            classificatore = Classifier(args.device)
+
+            # Caricamento classificatore
+            classificatore.load('classificatore.pth')
+
+            # Predizione sulle immagini
+            classificatore.eval_pics(args.folder)
+
 
     # c = Classifier()    # istanza di classificatore
     # #c.train_classifier(0.001, 15)   # lr=0.001 epoche= 10
