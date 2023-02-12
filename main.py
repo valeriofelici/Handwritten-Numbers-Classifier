@@ -356,7 +356,7 @@ class Classifier:
             sub_images[i] = sub_images[i].resize((28, 28))
             sub_images[i] = pil_tensor(sub_images[i])
             sub_images[i] = sub_images[i] / 255  # Normalizzazione tra 0 e 1
-            sub_images[i] = blacken_pixel(sub_images[i])  # Annerimento pixels sotto la soglia 0.6
+            # sub_images[i] = blacken_pixel(sub_images[i])  # Annerimento pixels sotto la soglia 0.6
             # sub_images[i] = tensor_pil(sub_images[i])
 
             a, b = self.forward(sub_images[i][None, :, :])
@@ -385,9 +385,7 @@ class Classifier:
             print('Il numero scritto nella foto', pics_list[i], 'è:', digit)
 
 
-
-
-# FUNZIONE DI ANNERIMENTO PIXELS
+# FUNZIONE DI ANNERIMENTO PIXELS ADDESSO SBIANCA!!!!
 def blacken_pixel(image):
     """Annerisce i pixel dell'immagine in input che hanno un livello di luminosità sotto la soglia di 0.6."""
 
@@ -404,6 +402,7 @@ def blacken_pixel(image):
 
     return image
 
+ 
 # ENTRY POINT
 if __name__ == "__main__":
 
@@ -411,7 +410,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", help="Specificare la modalità tra: addestramento(train), valutazione(evaluation), predizione immagini(eval_pics)", choices=['train', 'eval', 'eval_pics'])
     parser.add_argument("--lr", default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
-    parser.add_argument("--epoche", default=15, help="Specificare il numero di epoche per l'addestramento (default: 15)")
+    parser.add_argument("--epoche", default=15, help="Specificare il numero di epoche per l'addestramento (default: 10)")
     parser.add_argument("--batch_size", default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
     parser.add_argument("--device", choices=['cpu', 'cuda'], default='cuda', help='Specificare il device da usare (default:cuda)')
     parser.add_argument('--folder', default=None, help='Specificare il nome della cartella in cui sono contenute le immagini (default: None)')
