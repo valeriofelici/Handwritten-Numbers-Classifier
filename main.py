@@ -76,9 +76,9 @@ class Classifier:
         # Attributi della classe
 
         self.num_outputs = 10   # 10 classi mutuamente esclusive
-        self.device = torch.device(device)  # device in cui spostare i dati
-        self.preprocess_train = None
-        self.preprocess_eval = [None, None, None, None]
+        self.device = torch.device(device)  # device in cui saranno spostati i dati
+        self.preprocess_train = None    # operazioni di pre-processamento dei dati (per il training)
+        self.preprocess_eval = [None, None, None, None]     # operazioni di pre-processamento dei dati (per validation e testing)
 
         # Creazione della rete
 
@@ -110,10 +110,6 @@ class Classifier:
             nn.Dropout(),
             nn.Linear(128, self.num_outputs),
         )
-
-
-
-
 
         # Data augmentation sui dati per il training -> rotazione random (25,-25) gradi e trasformazione di scala tra (0.95,1.05)
 
@@ -164,17 +160,15 @@ class Classifier:
 
         self.net.load_state_dict(torch.load(nome_file, map_location=self.device))   # Metodo messo a disposizione da PyTorch
 
-    # FUNZIONE PER IL CALCOLO DELL'OUTPUT DELLA RETE CON E SENZA FUNZIONE DI ATTIVAZIONE????
+    # FUNZIONE PER IL CALCOLO DELL'OUTPUT DELLA RETE
 
     def forward(self, x):
         """Calcola l'output della rete"""
 
-        output_net_no_act = self.net(x)  # Output della rete senza attivazione??? SERVE????
-        output_net = torch.softmax(output_net_no_act, dim=1)    # Output dopo la funzione di attivazione (softmax in questo caso)
+        output_net_no_act = self.net(x)  # output della rete senza attivazione
+        output_net = torch.softmax(output_net_no_act, dim=1)    # output applicando la funzione di attivazione (softmax)
 
         return output_net_no_act, output_net
-
-    # def decision(self): # POTREBBE NON SERVIRE!!!!!!!!!!
 
     # FUNZIONE DI VALUTAZIONE DEL MODELLO
 
@@ -191,58 +185,57 @@ class Classifier:
 
         # Inizializzazione elementi
         correct = 0  # contatore predizioni corrette
-        tot_esempi = 0  # contatore esempi totali
+        tot_examples = 0  # contatore esempi totali
 
-        # Ciclo sui 4 subset che compongono il validation set
+        # Ciclo sui 4 subset che comporranno il validation set
 
         for subset in range(4):
 
-            validation_set.dataset.transform = self.preprocess_eval[subset]
+            validation_set.dataset.transform = self.preprocess_eval[subset]  # applica la trasformazione sui dati
 
-            # Ciclo sui batch di dati (batch mode)
+            # Ciclo sui batch di dati (batch-mode)
             for i, (images, labels) in enumerate(validation_set):
 
                 # Spostamento dei dati nel dispositivo corretto
-                images = images.to(self.device)  # spostamento dati nel device corretto
+                images = images.to(self.device)
                 labels = labels.to(self.device)
 
-                output_net_no_act, output_net = self.forward(images)    # Calcolo dell'output della rete
-                predictions = torch.argmax(output_net, dim=1)   # La predizione sarà relativa all'output più alto della rete
-                # predictions = predictions.data.cpu()
+                output_net_no_act, output_net = self.forward(images)    # calcolo output della rete sul batch di dati
+                predictions = torch.argmax(output_net, dim=1)   # predizioni della rete sul batch
                 # predictions = predictions.to(device='cuda:0')
-                correct += torch.sum(predictions == labels)  # Incrementa il totale delle predizioni corrette
-                tot_esempi += output_net_no_act.size(0)  # Incrementa il totale degli esempi presentati
+                correct += torch.sum(predictions == labels)  # incremento del totale delle predizioni corrette
+                tot_examples += output_net_no_act.size(0)  # incremento del totale degli esempi presentati
 
-        correct = correct*100.0/tot_esempi    # Calcolo percentuale
+        accuracy = correct*100.0/tot_examples   # calcolo percentuale predizioni corrette sul 40k esempi totali
 
         # Ripristino dei dati alle trasformazioni casuali usate per il training
         validation_set.dataset.transform = self.preprocess_train
 
-        return correct
+        return accuracy
 
     # FUNZIONE DI ADDESTRAMENTO DEL CLASSIFICATORE
 
     def train_classifier(self, learning_rate, epoche):
         """"Addestramento del classificatore con i dati per training e validation."""
 
-        # Inizializzazione elementi
-        best_epoch = -1     # Epoca in cui è stata ottenuta la precisione maggiore
-        best_accuracy = -1  # Precisione maggiore ottenuta
-        accuracy = -1   # Memorizza il valore della percentuale di precisione ottenuta
-        accuracies = []  # Memorizza le percentuali di precisione ottenute nell' addestramento (per il grafico finale)
+        # Inizializzazione variabili utili
+        best_epoch = -1     # epoca in cui è stata ottenuta la precisione maggiore
+        best_accuracy = -1  # precisione maggiore ottenuta
+        accuracy = -1   # memorizza il valore della percentuale di precisione ottenuta
+        accuracies = []  # memorizza le percentuali di precisione ottenute nell'addestramento
 
-        self.net.to(self.device)  # ???????????????????
+        #self.net.to(self.device)  # ???????????????????
 
-        # Controllo che la rete sia in 'modalità addestramento'
+        # assicura che la rete sia in 'modalità addestramento' (PyTorch)
         self.net.train()
 
         # Creazione ottimizzatore (Adam)
         optimizer = torch.optim.Adam(self.net.parameters(), lr=learning_rate)
 
-        # Scelta della loss function (Cross Entropy Loss)
+        # Loss function  (Cross Entropy Loss)
         criterion = nn.CrossEntropyLoss()
-        batch_loss = []
-        epoch_loss = []
+        batch_loss = []     # loss relativo al batch
+        epoch_loss = []     # loss relativo all'epoca
 
         # Ciclo sulle epoche
         for e in range(epoche):
@@ -256,38 +249,39 @@ class Classifier:
 
                 # Calcolo delle predizioni della rete
 
-                predictions, b = self.forward(images)   # CAMBIA NOME QUA!!!
+                output_net_no_act, output_net = self.forward(images)   # CAMBIA NOME QUA!!!
 
                 # Calcolo della loss function
-                loss = criterion(predictions, labels)   # Calcolo della loss function con classi predette e classi corrette
+                loss = criterion(output_net_no_act, labels)   # calcolo loss tra output della rete e classi corrette
                 batch_loss.append(loss.item())
+
                 # Calcolo gradienti e aggiornamento dei pesi della rete
-                optimizer.zero_grad()   # Azzeramento aree di memoria in cui erano stati inseriti i gradienti calcolati in precedenza
-                loss.backward()  # Backpropagation
-                optimizer.step()   # Aggiornamento pesi (valori contenuti nei filtri di convoluzione)
+                optimizer.zero_grad()   # azzeramento aree di memoria in cui erano stati inseriti i gradienti calcolati in precedenza
+                loss.backward()  # backpropagation
+                optimizer.step()   # aggiornamento pesi
 
             epoch_loss.append(round(sum(batch_loss)/len(batch_loss), 3))
+
             # Passaggio alla fase di valutazione della rete
             self.net.eval()
 
-            accuracy = float(self.eval_classifier(val_dataloader))
+            accuracy = float(self.eval_classifier(val_dataloader))  # PERCHè FLOAT??
             accuracies.append(accuracy)
 
             # Ritorno alla modalità di addestramento
             self.net.train()
 
-            # Stampa statistiche ottenute su ciascuna epoca
+            # Stampa statistiche ottenute sull'epoca
             print("Epoca: ", e+1, "\nPrecisione: ", round(accuracy, 4), "%")
             print('Loss: ', round(epoch_loss[-1], 4))
 
             # Controllo che sia stato raggiunto il valore max della precisione tra quelli ottenuti fino ad adesso
             if accuracy > best_accuracy:
-                self.save("classificatore.pth")  # Salvataggio del modello (è il miglior ottenuto fin qui)
-                best_accuracy = accuracy  # Aggiornamento del valore più alto di precisione ottenuto
+                self.save("classificatore.pth")  # salvataggio del modello (è il miglior ottenuto fin qui)
+                best_accuracy = accuracy  # aggiornamento del valore più alto di precisione ottenuto
                 print("Salvataggio del miglior modello: ", round(accuracy, 4), "% \n")
 
-        # Stampa del grafico relativo alla precisione della rete
-
+        # Stampa dei grafici relativi a precisione e loss
         fig, axs = plt.subplots(2)
         axs[0].plot(accuracies)
         axs[1].plot(epoch_loss)
@@ -297,7 +291,8 @@ class Classifier:
         #plt.show()
         #plt.plot(losses)
         #plt.show()
-        plt.savefig('plots.pdf')
+        plt.savefig('plots.pdf')    # salvataggio grafici in formato pdf
+
     # FUNZIONE DI SEGMENTAZIONE IMMAGINI
     def segment_image(self, image):
         """Segmenta l'immagine in tante immagini quante sono le cifre scritte a mano. Ogni immagine rappresenta l'area in cui è contenuta
