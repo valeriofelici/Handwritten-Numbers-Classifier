@@ -82,42 +82,69 @@ class Classifier:
 
         # Creazione della rete
 
-        self.net = nn.Sequential(   # SimpleCNN-based network
-            nn.Conv2d(1, 32, kernel_size=3, stride=1),  # 1° layer: 32 filtri (3x3) convoluti con stride=1
+        # self.net = nn.Sequential(   # SimpleCNN-based network
+        #     nn.Conv2d(1, 32, kernel_size=3, stride=1),  # 1° layer: 32 filtri (3x3) convoluti con stride=1
+        #     nn.ReLU(inplace=True),
+        #     nn.Conv2d(32, 64, kernel_size=3, stride=1),  # 2° layer: 64 filtri (3x3) convoluti con stride=1
+        #     nn.ReLU(inplace=True),
+        #     nn.MaxPool2d(kernel_size=2, stride=1),  # scelta delle migliori features tramite max pooling
+        #     nn.Dropout(),   # incrementa la convergenza
+        #     nn.Flatten(),   # appiattisce le feature maps
+        #     nn.Linear(64 * 23 * 23, 64),  # due layers di convoluzione e il pooling hanno generato 64 feature maps (23x23)
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+        #     nn.Linear(64, self.num_outputs),
+        # )
+
+        self.net = nn.Sequential(  # SimpleCNN-based network
+            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),  # 1° layer: 32 filtri (3x3) convoluti con stride=1
             nn.ReLU(inplace=True),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1),  # 2° layer: 64 filtri (3x3) convoluti con stride=1
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 2° layer: 64 filtri (3x3) convoluti con stride=1
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=1),  # scelta delle migliori features tramite max pooling
-            nn.Dropout(),   # incrementa la convergenza
-            nn.Flatten(),   # appiattisce le feature maps
-            nn.Linear(64 * 23 * 23, 64),  # due layers di convoluzione e il pooling hanno generato 64 feature maps (23x23)
+            nn.MaxPool2d(kernel_size=2, stride=2),  # scelta delle migliori features tramite max pooling
+            nn.Dropout(),  # incrementa la convergenza
+            nn.Flatten(),  # appiattisce le feature maps
+            nn.Linear(64 * 7 * 7, 128),  # due layers di convoluzione e il pooling hanno generato 64 feature maps (23x23)
             nn.ReLU(inplace=True),
             nn.Dropout(),
-            nn.Linear(64, self.num_outputs),
+            nn.Linear(128, self.num_outputs),
         )
 
-        # Data augmentation sui dati per il training ->  rotazione random (25,-25) gradi e trasformazione di scala tra (0.95,1.05)
 
-        self.preprocess_train = transforms.Compose([
-            transforms.RandomAffine(degrees=25, scale=(0.95, 1.05)),
-            transforms.ToTensor(),  # passaggio da PIL a tensore e normalizzazione tra (0,1)
-        ])
+
+
+
+        # Data augmentation sui dati per il training -> rotazione random (25,-25) gradi e trasformazione di scala tra (0.95,1.05)
+
+        # self.preprocess_train = transforms.Compose([
+        #     transforms.RandomAffine(degrees=25, scale=(0.95, 1.05)),
+        #     transforms.ToTensor(),  # passaggio da PIL a tensore e normalizzazione tra (0,1)
+        # ])
+
+        self.preprocess_train = transforms.ToTensor()
 
         # Data augmentation sui dati per il validation e per il test (qua sono trasformazioni fisse)
 
+        # self.preprocess_eval = [transforms.ToTensor(),
+        #                         transforms.Compose([
+        #                             transforms.RandomRotation(degrees=(15, 15)),
+        #                             transforms.ToTensor(),
+        #                         ]),
+        #                         transforms.Compose([
+        #                             transforms.RandomRotation(degrees=(-15, -15)),
+        #                             transforms.ToTensor(),
+        #                         ]),
+        #                         transforms.Compose([
+        #                             transforms.RandomAffine(degrees=0, scale=(1.05, 1.05)),
+        #                             transforms.ToTensor(),
+        #                         ])
+        #                         ]
+
         self.preprocess_eval = [transforms.ToTensor(),
-                                transforms.Compose([
-                                    transforms.RandomRotation(degrees=(15, 15)),
-                                    transforms.ToTensor(),
-                                ]),
-                                transforms.Compose([
-                                    transforms.RandomRotation(degrees=(-15, -15)),
-                                    transforms.ToTensor(),
-                                ]),
-                                transforms.Compose([
-                                    transforms.RandomAffine(degrees=0, scale=(1.05, 1.05)),
-                                    transforms.ToTensor(),
-                                ])
+                                transforms.ToTensor(),
+                                transforms.ToTensor(),
+                                transforms.ToTensor()
                                 ]
 
         # Spostamento della rete nella memoria del dispositivo corretto
@@ -175,14 +202,18 @@ class Classifier:
             # Ciclo sui batch di dati (batch mode)
             for i, (images, labels) in enumerate(validation_set):
 
-                #images = images.cuda()  # ???????????????????
-                output_net_no_act, output_net = self.forward(images)    # Calcolo dell' output della rete
+                # Spostamento dei dati nel dispositivo corretto
+                images = images.to(self.device)  # spostamento dati nel device corretto
+                labels = labels.to(self.device)
+
+                output_net_no_act, output_net = self.forward(images)    # Calcolo dell'output della rete
                 predictions = torch.argmax(output_net, dim=1)   # La predizione sarà relativa all'output più alto della rete
-                predictions = predictions.data.cpu()    # ????????????????????????
+                # predictions = predictions.data.cpu()
+                # predictions = predictions.to(device='cuda:0')
                 correct += torch.sum(predictions == labels)  # Incrementa il totale delle predizioni corrette
                 tot_esempi += output_net_no_act.size(0)  # Incrementa il totale degli esempi presentati
 
-        correct = correct*100./tot_esempi    # Calcolo percentuale
+        correct = correct*100.0/tot_esempi    # Calcolo percentuale
 
         # Ripristino dei dati alle trasformazioni casuali usate per il training
         validation_set.dataset.transform = self.preprocess_train
@@ -209,8 +240,9 @@ class Classifier:
         optimizer = torch.optim.Adam(self.net.parameters(), lr=learning_rate)
 
         # Scelta della loss function (Cross Entropy Loss)
-        loss_function = nn.CrossEntropyLoss()
-        losses = []     # Memorizza i valori assunti dalla loss function
+        criterion = nn.CrossEntropyLoss()
+        batch_loss = []
+        epoch_loss = []
 
         # Ciclo sulle epoche
         for e in range(epoche):
@@ -227,13 +259,14 @@ class Classifier:
                 predictions, b = self.forward(images)   # CAMBIA NOME QUA!!!
 
                 # Calcolo della loss function
-                loss = loss_function(predictions, labels)   # Calcolo della loss function con classi predette e classi corrette
-                losses.append(loss.item())
+                loss = criterion(predictions, labels)   # Calcolo della loss function con classi predette e classi corrette
+                batch_loss.append(loss.item())
                 # Calcolo gradienti e aggiornamento dei pesi della rete
                 optimizer.zero_grad()   # Azzeramento aree di memoria in cui erano stati inseriti i gradienti calcolati in precedenza
                 loss.backward()  # Backpropagation
                 optimizer.step()   # Aggiornamento pesi (valori contenuti nei filtri di convoluzione)
 
+            epoch_loss.append(round(sum(batch_loss)/len(batch_loss), 3))
             # Passaggio alla fase di valutazione della rete
             self.net.eval()
 
@@ -244,7 +277,8 @@ class Classifier:
             self.net.train()
 
             # Stampa statistiche ottenute su ciascuna epoca
-            print("Epoca: ", e+1, "Precisione: ", round(accuracy, 4), "%")
+            print("Epoca: ", e+1, "\nPrecisione: ", round(accuracy, 4), "%")
+            print('Loss: ', round(epoch_loss[-1], 4))
 
             # Controllo che sia stato raggiunto il valore max della precisione tra quelli ottenuti fino ad adesso
             if accuracy > best_accuracy:
@@ -255,14 +289,15 @@ class Classifier:
         # Stampa del grafico relativo alla precisione della rete
 
         fig, axs = plt.subplots(2)
-        fig.suptitle("Grafici")
         axs[0].plot(accuracies)
-        axs[1].plot(losses)
+        axs[1].plot(epoch_loss)
+        axs[0].set_title('Accuracy')
+        axs[1].set_title('Loss')
         #plt.plot(accuracies)
         #plt.show()
         #plt.plot(losses)
-        plt.show()
-
+        #plt.show()
+        plt.savefig('plots.pdf')
     # FUNZIONE DI SEGMENTAZIONE IMMAGINI
     def segment_image(self, image):
         """Segmenta l'immagine in tante immagini quante sono le cifre scritte a mano. Ogni immagine rappresenta l'area in cui è contenuta
@@ -354,10 +389,19 @@ class Classifier:
         for i in range(len(sub_images)):
             sub_images[i] = tensor_pil(sub_images[i])
             sub_images[i] = sub_images[i].resize((28, 28))
+            #plt.imshow(sub_images[i], cmap='gray')
+            #plt.show()
             sub_images[i] = pil_tensor(sub_images[i])
             sub_images[i] = sub_images[i] / 255  # Normalizzazione tra 0 e 1
-            # sub_images[i] = blacken_pixel(sub_images[i])  # Annerimento pixels sotto la soglia 0.6
+            sub_images[i] = blacken_pixel(sub_images[i])  # Annerimento pixels sotto la soglia 0.6
+            # plt.imshow(sub_images[i], cmap='gray')
+            # plt.show()
+            # print(sub_images[i].size())
             # sub_images[i] = tensor_pil(sub_images[i])
+            # plt.imshow(sub_images[i], cmap='gray')
+            # plt.show()
+            # sub_images[i] = pil_tensor(sub_images[i])
+            print(sub_images[i].size())
 
             a, b = self.forward(sub_images[i][None, :, :])
             d = torch.argmax(b, dim=1).item()
@@ -389,16 +433,16 @@ class Classifier:
 def blacken_pixel(image):
     """Annerisce i pixel dell'immagine in input che hanno un livello di luminosità sotto la soglia di 0.6."""
 
-    soglia = 0.2    # soglia sotto la quale un pixel viene considerato spento
+    soglia = 0.4    # soglia sotto la quale un pixel viene considerato spento
 
     # Loop sui pixels dell'immagine (tensore con elementi compresi tra 0 e 1)
     for i in range(image.size(1)):
 
         for j in range(image.size(2)):
 
-            if image[0][i][j] > 0:
+            if image[0][i][j] < soglia:
 
-                image[0][i][j] = 1
+                image[0][i][j] = 0
 
     return image
 
@@ -410,7 +454,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", help="Specificare la modalità tra: addestramento(train), valutazione(evaluation), predizione immagini(eval_pics)", choices=['train', 'eval', 'eval_pics'])
     parser.add_argument("--lr", default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
-    parser.add_argument("--epoche", default=15, help="Specificare il numero di epoche per l'addestramento (default: 10)")
+    parser.add_argument("--epoche", default=10, help="Specificare il numero di epoche per l'addestramento (default: 10)")
     parser.add_argument("--batch_size", default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
     parser.add_argument("--device", choices=['cpu', 'cuda'], default='cuda', help='Specificare il device da usare (default:cuda)')
     parser.add_argument('--folder', default=None, help='Specificare il nome della cartella in cui sono contenute le immagini (default: None)')
@@ -461,12 +505,12 @@ if __name__ == "__main__":
         classificatore.load('classificatore.pth')
 
         # Valutazione delle prestazioni del modello sui 3 dataset
-        train_acc = classificatore.eval_classifier(train_dataloader)
+        # train_acc = classificatore.eval_classifier(train_dataloader)
         val_acc = classificatore.eval_classifier(val_dataloader)
         test_acc = classificatore.eval_classifier(test_dataloader)
 
         # Stampa risultati ottenuti sui 3 dataset
-        print('Accuracy sul training set: ', round(train_acc.item(), 2), '%')
+        # print('Accuracy sul training set: ', round(train_acc.item(), 2), '%')
         print('Accuracy sul validation set: ', round(val_acc.item(), 2), '%')
         print('Accuracy sul test set: ', round(test_acc.item(), 2), '%')
 
@@ -492,7 +536,7 @@ if __name__ == "__main__":
             print('SPECIFICARE IL NOME DELLA CARTELLA IN CUI SONO CONTENUTE LE IMMAGINI!')
 
         else:
-            print('Predizione dell immagini nella cartella: ', args.folder)
+            print('Predizione delle immagini nella cartella: ', args.folder)
 
             # Creazione nuovo classificatore
             classificatore = Classifier(args.device)
