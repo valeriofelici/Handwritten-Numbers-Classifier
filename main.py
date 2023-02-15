@@ -21,7 +21,7 @@ from PIL import Image, ImageOps
 
 # Parametri che verranno specificati da linea di comando
 LR = None
-EPOCHE = None
+EPOCHS = None
 BATCH_SIZE = None
 
 
@@ -66,7 +66,7 @@ def download_data(folder):
 class Classifier:
     """Classificatore per la predizione su immagini di numeri scritti a mano."""
 
-    def __init__(self, device="cpu"):
+    def __init__(self, cnn_structure='cnn1', data_augmentation=1, device="cpu"):
         """Crea un classificatore non addestrato.
 
         Args:
@@ -81,67 +81,71 @@ class Classifier:
         self.preprocess_eval = [None, None, None, None]     # operazioni di pre-processamento dei dati (per validation e testing)
 
         # Creazione della rete
+        if cnn_structure is not None and cnn_structure == 'cnn1':
 
-        # self.net = nn.Sequential(   # SimpleCNN-based network
-        #     nn.Conv2d(1, 32, kernel_size=3, stride=1),  # 1° layer: 32 filtri (3x3) convoluti con stride=1
-        #     nn.ReLU(inplace=True),
-        #     nn.Conv2d(32, 64, kernel_size=3, stride=1),  # 2° layer: 64 filtri (3x3) convoluti con stride=1
-        #     nn.ReLU(inplace=True),
-        #     nn.MaxPool2d(kernel_size=2, stride=1),  # scelta delle migliori features tramite max pooling
-        #     nn.Dropout(),   # incrementa la convergenza
-        #     nn.Flatten(),   # appiattisce le feature maps
-        #     nn.Linear(64 * 23 * 23, 64),  # due layers di convoluzione e il pooling hanno generato 64 feature maps (23x23)
-        #     nn.ReLU(inplace=True),
-        #     nn.Dropout(),
-        #     nn.Linear(64, self.num_outputs),
-        # )
+            # Primo tipo di CNN
+            self.net = nn.Sequential(   # SimpleCNN-based network
+                nn.Conv2d(1, 32, kernel_size=3, stride=1),  # 1° layer: 32 filtri (3x3) convoluti con stride=1
+                nn.ReLU(inplace=True),
+                nn.Conv2d(32, 64, kernel_size=3, stride=1),  # 2° layer: 64 filtri (3x3) convoluti con stride=1
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(kernel_size=2, stride=1),  # scelta delle migliori features tramite max pooling
+                nn.Dropout(),   # incrementa la convergenza
+                nn.Flatten(),   # appiattisce le feature maps
+                nn.Linear(64 * 23 * 23, 64),  # due layers di convoluzione e il pooling hanno generato 64 feature maps (23x23)
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(64, self.num_outputs),
+            )
 
-        self.net = nn.Sequential(  # SimpleCNN-based network
-            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),  # 1° layer: 32 filtri (3x3) convoluti con stride=1
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 2° layer: 64 filtri (3x3) convoluti con stride=1
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # scelta delle migliori features tramite max pooling
-            nn.Dropout(),  # incrementa la convergenza
-            nn.Flatten(),  # appiattisce le feature maps
-            nn.Linear(64 * 7 * 7, 128),  # due layers di convoluzione e il pooling hanno generato 64 feature maps (23x23)
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(128, self.num_outputs),
-        )
+        elif cnn_structure is not None and cnn_structure == 'cnn2':
 
-        # Data augmentation sui dati per il training -> rotazione random (25,-25) gradi e trasformazione di scala tra (0.95,1.05)
+            # Secondo tipo di CNN
+            self.net = nn.Sequential(  # SimpleCNN-based network
+                nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),  # 1° layer: 32 filtri (3x3) convoluti con stride=1
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(kernel_size=2, stride=2),
+                nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 2° layer: 64 filtri (3x3) convoluti con stride=1
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(kernel_size=2, stride=2),  # scelta delle migliori features tramite max pooling
+                nn.Dropout(),  # incrementa la convergenza
+                nn.Flatten(),  # appiattisce le feature maps
+                nn.Linear(64 * 7 * 7, 128),  # due layers di convoluzione e il pooling hanno generato 64 feature maps (23x23)
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(128, self.num_outputs),
+            )
 
-        # self.preprocess_train = transforms.Compose([
-        #     transforms.RandomAffine(degrees=25, scale=(0.95, 1.05)),
-        #     transforms.ToTensor(),  # passaggio da PIL a tensore e normalizzazione tra (0,1)
-        # ])
+        if data_augmentation:
 
-        self.preprocess_train = transforms.ToTensor()
+            # Data augmentation sui dati per il training -> rotazione random (25,-25) gradi e trasformazione di scala tra (0.95,1.05)
 
-        # Data augmentation sui dati per il validation e per il test (qua sono trasformazioni fisse)
+            self.preprocess_train = transforms.Compose([
+                transforms.RandomAffine(degrees=25, scale=(0.95, 1.05)),
+                transforms.ToTensor(),  # passaggio da PIL a tensore e normalizzazione tra (0,1)
+            ])
 
-        # self.preprocess_eval = [transforms.ToTensor(),
-        #                         transforms.Compose([
-        #                             transforms.RandomRotation(degrees=(15, 15)),
-        #                             transforms.ToTensor(),
-        #                         ]),
-        #                         transforms.Compose([
-        #                             transforms.RandomRotation(degrees=(-15, -15)),
-        #                             transforms.ToTensor(),
-        #                         ]),
-        #                         transforms.Compose([
-        #                             transforms.RandomAffine(degrees=0, scale=(1.05, 1.05)),
-        #                             transforms.ToTensor(),
-        #                         ])
-        #                         ]
+            # Data augmentation sui dati per il validation e per il test (qua sono trasformazioni fisse)
 
-        self.preprocess_eval = [transforms.ToTensor(),
-                                transforms.ToTensor(),
-                                transforms.ToTensor(),
-                                transforms.ToTensor()
-                                ]
+            self.preprocess_eval = [transforms.ToTensor(),
+                                    transforms.Compose([
+                                        transforms.RandomRotation(degrees=(15, 15)),
+                                        transforms.ToTensor(),
+                                    ]),
+                                    transforms.Compose([
+                                        transforms.RandomRotation(degrees=(-15, -15)),
+                                        transforms.ToTensor(),
+                                    ]),
+                                    transforms.Compose([
+                                        transforms.RandomAffine(degrees=0, scale=(1.05, 1.05)),
+                                        transforms.ToTensor(),
+                                    ])
+                                    ]
+
+        else:   # nessuna trasformazione sui dati oltre alla normalizzazione
+
+            self.preprocess_train = [transforms.ToTensor()]
+            self.preprocess_eval = [transforms.ToTensor()]
 
         # Spostamento della rete nella memoria del dispositivo corretto
         self.net.to(self.device)
@@ -170,9 +174,24 @@ class Classifier:
 
         return output_net_no_act, output_net
 
+    @staticmethod
+    def decision(output_net):
+        """Restituisce la predizione dato l'output della rete dopo l'applicazione della funzione di attivazione.
+
+        Args:
+            output_net: Tensore 2D con righe pari agli outputs generati dalla rete
+
+        Returns:
+            predictions: Tensore 1D in cui ogni elemento è la classe predetta dalla rete per ciascun output (ciascuna riga)
+        """
+
+        predictions = torch.argmax(output_net, dim=1)  # le predizioni sono gli indici dell'elemento più alto di ciascuna riga
+
+        return predictions
+
     # FUNZIONE DI VALUTAZIONE DEL MODELLO
 
-    def eval_classifier(self, validation_set):
+    def eval_classifier(self, data_set):
         """Valuta le prestazioni del modello su un validation set di (40k esempi) composto da 4 subset a loro volta
         composti da 10k esempi presi dal training set su cui vengono fatte 4 trasformazioni fisse (una per ciascun subset):
 
@@ -184,38 +203,43 @@ class Classifier:
         """
 
         # Inizializzazione elementi
-        correct = 0  # contatore predizioni corrette
-        tot_examples = 0  # contatore esempi totali
+        tot_predictions = []    # contenitore di tutte le predizioni fatte dalla rete
+        tot_labels = []     # contenitore di tutte le labels
 
-        # Ciclo sui 4 subset che comporranno il validation set
+        # Ciclo sui subset che comporranno il validation set
+        for subset in range(len(self.preprocess_eval)):
 
-        for subset in range(4):
-
-            validation_set.dataset.transform = self.preprocess_eval[subset]  # applica la trasformazione sui dati
+            data_set.dataset.transform = self.preprocess_eval[subset]  # applica la trasformazione sui dati
 
             # Ciclo sui batch di dati (batch-mode)
-            for i, (images, labels) in enumerate(validation_set):
+            for i, (images, labels) in enumerate(data_set):
 
                 # Spostamento dei dati nel dispositivo corretto
                 images = images.to(self.device)
-                labels = labels.to(self.device)
+                # labels = labels.to(self.device)
 
                 output_net_no_act, output_net = self.forward(images)    # calcolo output della rete sul batch di dati
-                predictions = torch.argmax(output_net, dim=1)   # predizioni della rete sul batch
-                # predictions = predictions.to(device='cuda:0')
-                correct += torch.sum(predictions == labels)  # incremento del totale delle predizioni corrette
-                tot_examples += output_net_no_act.size(0)  # incremento del totale degli esempi presentati
+                predictions = self.decision(output_net)   # predizioni della rete sul batch
+                tot_predictions.append(predictions.cpu())   # aggiunta predizioni sul batch attuale alle altre
+                tot_labels.append(labels)   # aggiunta labels sul batch attuale alle altre
 
-        accuracy = correct*100.0/tot_examples   # calcolo percentuale predizioni corrette sul 40k esempi totali
+                # predictions = predictions.to(device='cuda:0')
+                # correct += torch.sum(predictions == labels)  # incremento del totale delle predizioni corrette
+                # tot_examples += output_net_no_act.size(0)  # incremento del totale degli esempi presentati
+
+        # Calcolo precisione
+        dataset_accuracy = self.compute_accuracy(torch.cat(tot_predictions, 0), torch.cat(tot_labels, 0))
+
+        # accuracy = correct*100.0/tot_examples calcolo percentuale predizioni corrette sul 40k esempi totali
 
         # Ripristino dei dati alle trasformazioni casuali usate per il training
-        validation_set.dataset.transform = self.preprocess_train
+        data_set.dataset.transform = self.preprocess_train
 
-        return accuracy
+        return dataset_accuracy
 
     # FUNZIONE DI ADDESTRAMENTO DEL CLASSIFICATORE
 
-    def train_classifier(self, learning_rate, epoche):
+    def train_classifier(self, learning_rate, epochs):
         """"Addestramento del classificatore con i dati per training e validation."""
 
         # Inizializzazione variabili utili
@@ -238,7 +262,12 @@ class Classifier:
         epoch_loss = []     # loss relativo all'epoca
 
         # Ciclo sulle epoche
-        for e in range(epoche):
+        for e in range(epochs):
+
+            # Inizializzazione variabili per le statistiche sull'epoca attuale
+            epoch_train_acc = 0.    # precisione sul training
+            epoch_train_loss = 0.   # loss sul training
+            epoch_train_examples = 0    # contatore esempi presentati durante l'epoca
 
             # Ciclo sui batch di dati (batch mode)
             for i, (images, labels) in enumerate(train_dataloader):
@@ -247,51 +276,81 @@ class Classifier:
                 images = images.to(self.device)
                 labels = labels.to(self.device)
 
-                # Calcolo delle predizioni della rete
+                batch_train_examples = images.shape[0]  # per l'ultimo batch di dati può essere inferiore a batch_size
+                epoch_train_examples += batch_train_examples    # aggiornamento contatore esempi presentati nell'epoca
 
-                output_net_no_act, output_net = self.forward(images)   # CAMBIA NOME QUA!!!
+                # Calcolo delle predizioni della rete
+                output_net_no_act, output_net = self.forward(images)
 
                 # Calcolo della loss function
                 loss = criterion(output_net_no_act, labels)   # calcolo loss tra output della rete e classi corrette
-                batch_loss.append(loss.item())
+                #batch_loss.append(loss.item())
 
                 # Calcolo gradienti e aggiornamento dei pesi della rete
                 optimizer.zero_grad()   # azzeramento aree di memoria in cui erano stati inseriti i gradienti calcolati in precedenza
                 loss.backward()  # backpropagation
                 optimizer.step()   # aggiornamento pesi
 
-            epoch_loss.append(round(sum(batch_loss)/len(batch_loss), 3))
+                # Calcolo prestazioni rete sul mini-batch per il training corrente
+                with torch.no_grad():
+                    self.net.eval()  # passaggio alla modalità di valutazione
 
-            # Passaggio alla fase di valutazione della rete
-            self.net.eval()
+                    # Calcolo prestazioni sul batch
+                    predictions = self.decision(output_net)  # predizioni sul batch corrente
+                    batch_train_acc = self.compute_accuracy(predictions, labels)    # precisione sul batch corrente
 
-            accuracy = float(self.eval_classifier(val_dataloader))  # PERCHè FLOAT??
-            accuracies.append(accuracy)
+                    # Aggiornamento prestazioni sull'epoca
+                    epoch_train_acc += batch_train_acc*batch_train_examples
+                    epoch_train_loss += loss.item()*batch_train_examples
 
-            # Ritorno alla modalità di addestramento
-            self.net.train()
+                    self.net.train()    # ritorno alla modalità di training
+
+                    #print('mini batch:\t LOSS:', loss.item(), 'train accuracy: ', batch_train_acc)
+
+            val_accuracy = self.eval_classifier(val_dataloader)  # precisione sul validation set
+
+            epoch_train_loss /= epoch_train_examples
+            epoch_train_acc /= epoch_train_examples
 
             # Stampa statistiche ottenute sull'epoca
-            print("Epoca: ", e+1, "\nPrecisione: ", round(accuracy, 4), "%")
-            print('Loss: ', round(epoch_loss[-1], 4))
+            print("Epoca: ", e + 1, "\nPrecisione on Train: ", epoch_train_acc, "%")
+            print('Loss on Train: ', epoch_train_loss)
+            print('Precisione sul Validation: ', val_accuracy, '%')
 
             # Controllo che sia stato raggiunto il valore max della precisione tra quelli ottenuti fino ad adesso
-            if accuracy > best_accuracy:
+            if val_accuracy > best_accuracy:
                 self.save("classificatore.pth")  # salvataggio del modello (è il miglior ottenuto fin qui)
-                best_accuracy = accuracy  # aggiornamento del valore più alto di precisione ottenuto
-                print("Salvataggio del miglior modello: ", round(accuracy, 4), "% \n")
+                best_accuracy = val_accuracy  # aggiornamento del valore più alto di precisione ottenuto
+                print("Salvataggio del miglior modello: ", val_accuracy, "% \n")
 
         # Stampa dei grafici relativi a precisione e loss
-        fig, axs = plt.subplots(2)
-        axs[0].plot(accuracies)
-        axs[1].plot(epoch_loss)
-        axs[0].set_title('Accuracy')
-        axs[1].set_title('Loss')
-        #plt.plot(accuracies)
-        #plt.show()
-        #plt.plot(losses)
-        #plt.show()
-        plt.savefig('plots.pdf')    # salvataggio grafici in formato pdf
+        # fig, axs = plt.subplots(2)
+        # axs[0].plot(val_accuracy)
+        # axs[1].plot(epoch_loss)
+        # axs[0].set_title('Accuracy')
+        # axs[1].set_title('Loss')
+        # #plt.plot(accuracies)
+        # #plt.show()
+        # #plt.plot(losses)
+        # #plt.show()
+        # plt.savefig('plots.pdf')    # salvataggio grafici in formato pdf
+
+    def compute_accuracy(self, predictions, labels):
+        """Calcola la precisione della rete rispetto alle classi corrette
+
+        Args:
+            predictions: Tensore 1D con le predizioni della rete
+            labels: Tensore 1D con le predizioni corrette
+
+        Returns:
+            accuracy: percentuale di predizioni corrette
+        """
+        correct = torch.sum(predictions==labels)   # conteggio predizioni corrette
+        accuracy = float(correct*100.0/len(labels))  # percentuale predizioni corrette
+        accuracy = round(accuracy, 4)
+
+        return accuracy
+
 
     # FUNZIONE DI SEGMENTAZIONE IMMAGINI
     def segment_image(self, image):
@@ -309,44 +368,45 @@ class Classifier:
         immagine = Image.open(image)
 
         # Operazioni sull'immagine
-        immagine = ImageOps.grayscale(immagine)  # Passaggio a scala di grigi (1 canale)
-        immagine = ImageOps.invert(immagine)  # Inversione colori immagine (in accordo con il dataset MNIST)
+        immagine = ImageOps.grayscale(immagine)  # passaggio a scala di grigi (1 canale)
+        immagine = ImageOps.invert(immagine)  # inversione colori immagine (in accordo con il dataset MNIST)
         # plt.imshow(immagine, cmap='gray')
         # plt.show()
+
         # Definizione variabili per passaggio da PIL a Tensore e viceversa
-        pil_tensor = transforms.PILToTensor()
-        tensor_pil = transforms.ToPILImage()
+        pil_tensor = transforms.ToTensor()  # per la conversione da PIL a tensore (normalizzando tra 0 e 1)
+        tensor_pil = transforms.ToPILImage()    # per la conversione da tensore a PIL
 
         immagine_tensore = pil_tensor(immagine)
-        immagine_tensore = immagine_tensore / 255  # Normalizzazione tra 0 e 1
+        #immagine_tensore = immagine_tensore / 255  # Normalizzazione tra 0 e 1
 
         # Inizializzazione variabili
-        colonna = 0  # Rappresenta la colonna relativa all'inizio dell'area in cui è contenuta una cifra (estremo sx area)
-        count_cifre = 0  # Contatore delle cifre individuate nell'immagine
-        sub_images = []  # Tensore con le sotto-immagini relative a ciascuna cifra
-        limite_sup = 0
-        limite_inf = 0
+        colonna = 0  # rappresenta la colonna relativa all'inizio dell'area in cui è contenuta una cifra (estremo sx area)
+        count_cifre = 0  # contatore delle cifre individuate nell'immagine
+        sub_images = []  # tensore con le sotto-immagini relative a ciascuna cifra
+        lim_sup = 0
+        lim_inf = 0
         end_number = 0
 
         # Definizione variabile soglia
-        soglia = 0.75  # Soglia sotto la quale un pixel viene considerato spento
+        soglia = 0.75  # soglia sotto la quale un pixel viene considerato spento
 
         # Rimozione bianco sopra e sotto
-        for i in range(immagine_tensore.size(1)):  # Scorre le righe
+        for i in range(immagine_tensore.size(1)):  # scorre le righe
 
-            for j in range(immagine_tensore.size(2)):  # Scorre le colonne
+            for j in range(immagine_tensore.size(2)):  # scorre le colonne
 
-                if (limite_sup == 0) & (immagine_tensore[0][i][j] > soglia):  # limite superiore trovato
+                if (lim_sup == 0) & (immagine_tensore[0][i][j] > soglia):  # limite superiore trovato
 
-                    limite_sup = i - 35
+                    lim_sup = i - 35
                     break
 
-                if (limite_sup != 0) & (immagine_tensore[0][i][j] > soglia):  # limite inferiore trovato
+                if (lim_sup != 0) & (immagine_tensore[0][i][j] > soglia):  # limite inferiore trovato
 
                     break
 
-                if (limite_sup != 0) & (j == (immagine_tensore.size(2) - 1)):
-                    limite_inf = i + 35
+                if (lim_sup != 0) & (j == (immagine_tensore.size(2) - 1)):
+                    lim_inf = i + 35
                     end_number = 1
                     break
 
@@ -354,12 +414,12 @@ class Classifier:
                 break
 
         # Eliminazione bordi superiori e inferiori immagine
-        immagine_tensore = immagine_tensore[:, limite_sup:limite_inf, :]
+        immagine_tensore = immagine_tensore[:, lim_sup:lim_inf, :]
 
         # Loop sui pixels dell'immagine, scorrendo per colonne
-        for j in range(immagine_tensore.size(2)):  # Scorre le colonne
+        for j in range(immagine_tensore.size(2)):  # scorre le colonne
 
-            for i in range(immagine_tensore.size(1)):  # Scorre le righe
+            for i in range(immagine_tensore.size(1)):  # scorre le righe
 
                 # if immagine[0][i][j] < 0.6:     # azzera i pixel poco luminosi (rumore?)
                 #     immagine[0][i][j] = 0
@@ -375,10 +435,10 @@ class Classifier:
                 if (colonna != 0) & (immagine_tensore[0][i][j] < soglia) & (i == (immagine_tensore.size(1) - 1)):  # è finito il digit
                     count_cifre += 1  # incremento il contatore dei digit trovati
                     # creazione sezione digit trovato
-                    sub_images.append(immagine_tensore[0, :, colonna:j + 35])  # Salvataggio del tensore relativo all'area trovata
+                    sub_images.append(immagine_tensore[0, :, colonna:j + 35])  # salvataggio del tensore relativo all'area trovata
                     colonna = 0  # si azzera una volta definito l'estremo dx dell'area della cifra
 
-        digit = ''  # Stringa che sarà composta dalle predizioni su ogni cifra
+        digit = ''  # stringa che sarà composta dalle predizioni su ogni cifra
 
         # Loop sulle sotto-immagini per passare da tensore a PIL, per passare alla dimensione (28x28) e tornare a tensore
         for i in range(len(sub_images)):
@@ -387,8 +447,12 @@ class Classifier:
             #plt.imshow(sub_images[i], cmap='gray')
             #plt.show()
             sub_images[i] = pil_tensor(sub_images[i])
-            sub_images[i] = sub_images[i] / 255  # Normalizzazione tra 0 e 1
-            sub_images[i] = blacken_pixel(sub_images[i])  # Annerimento pixels sotto la soglia 0.6
+            # sub_images[i] = sub_images[i] / 255  # normalizzazione tra 0 e 1
+            #sub_images[i] = blacken_pixel(sub_images[i])  # annerimento pixels sotto la soglia 0.6
+            sub_images[i] = tensor_pil(sub_images[i])
+            plt.imshow(sub_images[i], cmap='gray')
+            plt.show()
+            sub_images[i] = pil_tensor(sub_images[i])
             # plt.imshow(sub_images[i], cmap='gray')
             # plt.show()
             # print(sub_images[i].size())
@@ -428,7 +492,7 @@ class Classifier:
 def blacken_pixel(image):
     """Annerisce i pixel dell'immagine in input che hanno un livello di luminosità sotto la soglia di 0.6."""
 
-    soglia = 0.4    # soglia sotto la quale un pixel viene considerato spento
+    soglia = 0.5    # soglia sotto la quale un pixel viene considerato spento
 
     # Loop sui pixels dell'immagine (tensore con elementi compresi tra 0 e 1)
     for i in range(image.size(1)):
@@ -447,18 +511,24 @@ if __name__ == "__main__":
 
     # Istruzioni da linea di comando
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", help="Specificare la modalità tra: addestramento(train), valutazione(evaluation), predizione immagini(eval_pics)", choices=['train', 'eval', 'eval_pics'])
-    parser.add_argument("--lr", default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
-    parser.add_argument("--epoche", default=10, help="Specificare il numero di epoche per l'addestramento (default: 10)")
-    parser.add_argument("--batch_size", default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
-    parser.add_argument("--device", choices=['cpu', 'cuda'], default='cuda', help='Specificare il device da usare (default:cuda)')
-    parser.add_argument('--folder', default=None, help='Specificare il nome della cartella in cui sono contenute le immagini (default: None)')
+    parser.add_argument("mode", choices=['train', 'eval', 'eval_pics'],
+                        help="Specificare la modalità tra: addestramento(train), valutazione(eval), predizione su immagini(eval_pics)")
+    parser.add_argument('--cnn_structure', type=str, default='cnn1', choices=['cnn1', 'cnn2'],
+                        help='Specificare il modello da usare (default: cnn1)')
+    parser.add_argument('--data_augmentation', type=int, default=1, choices=[1, 0],
+                        help='Specificare se applicare trasformazioni sui dati')
+    parser.add_argument("--lr", type=float, default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
+    parser.add_argument("--epochs", type=int, default=10, help="Specificare il numero di epoche per l'addestramento (default: 10)")
+    parser.add_argument("--batch_size", type=int, default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
+    parser.add_argument("--device", choices=['cpu', 'cuda'], default='cpu', help='Specificare il device da usare (default:cpu)')
+    parser.add_argument('--folder', type=str, default=None,
+                        help='Specificare il nome della cartella in cui sono contenute le immagini (default: None)')
     args = parser.parse_args()
 
     # VALUTAZIONI ISTRUZIONI DA LINEA DI COMANDO
-    LR = float(args.lr)
-    EPOCHS = int(args.epoche)
-    BATCH_SIZE = int(args.batch_size)
+    LR = args.lr
+    EPOCHS = args.epochs
+    BATCH_SIZE = args.batch_size
 
     # DOWNLOAD DATASET MNIST NELLA CARTELLA 'dataset' SE NON GIA' PRESENTE
     train_data, val_data, test_data = download_data("dataset")
@@ -490,7 +560,7 @@ if __name__ == "__main__":
         print('Training classifier...')
 
         # Creazione di un nuovo classificatore
-        classificatore = Classifier(args.device)
+        classificatore = Classifier(args.cnn_structure, args.data_augmentation, args.device)
 
         # Addestramento del classificatore
         classificatore.train_classifier(LR, EPOCHS)
@@ -506,15 +576,15 @@ if __name__ == "__main__":
 
         # Stampa risultati ottenuti sui 3 dataset
         # print('Accuracy sul training set: ', round(train_acc.item(), 2), '%')
-        print('Accuracy sul validation set: ', round(val_acc.item(), 2), '%')
-        print('Accuracy sul test set: ', round(test_acc.item(), 2), '%')
+        print('Accuracy sul validation set: ', round(val_acc, 2), '%')
+        print('Accuracy sul test set: ', round(test_acc, 2), '%')
 
     elif args.mode == 'eval':
 
         print('Valutazione classificatore...')
 
         # Creazione nuovo classificatore
-        classificatore = Classifier(args.device)
+        classificatore = Classifier(args.cnn_structure, args.data_augmentation, args.device)
 
         # Caricamento classificatore
         classificatore.load('classificatore.pth')
@@ -528,13 +598,13 @@ if __name__ == "__main__":
     elif args.mode == 'eval_pics':
 
         if args.folder is None:
-            print('SPECIFICARE IL NOME DELLA CARTELLA IN CUI SONO CONTENUTE LE IMMAGINI!')
+            print('SPECIFICARE IL NOME DELLA CARTELLA IN CUI SONO CONTENUTE LE IMMAGINI! -> --folder=folder_name in the command line')
 
         else:
             print('Predizione delle immagini nella cartella: ', args.folder)
 
             # Creazione nuovo classificatore
-            classificatore = Classifier(args.device)
+            classificatore = Classifier(args.cnn_structure, args.data_augmentation, args.device)
 
             # Caricamento classificatore
             classificatore.load('classificatore.pth')
