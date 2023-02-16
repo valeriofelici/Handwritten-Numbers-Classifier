@@ -48,12 +48,13 @@ def download_data(folder):
     training_set = MNIST(root=folder,   # cartella di destinazione
                          train=True,    # dati per il train
                          download=True,
-                         transform=training_data_transform)
+                         transform=training_data_transform
+                         )
 
     test_set = MNIST(root=folder,
                      train=False,  # dati per il test
                      download=True,
-                     transform=ToTensor(),  # i dati di test non sono soggetti a trasformazioni in questa fase
+                     transform=ToTensor()  # i dati di test non sono soggetti a trasformazioni in questa fase
                      )
 
     # Creazione del validation set (bilanciato rispetto alle classi) prendendo 10k esempi dal training set
@@ -66,10 +67,12 @@ def download_data(folder):
 class Classifier:
     """Classificatore per la predizione su immagini di numeri scritti a mano."""
 
-    def __init__(self, cnn_structure='cnn1', data_augmentation=1, device="cpu"):
+    def __init__(self, cnn_structure='cnn1', device="cpu"):
         """Crea un classificatore non addestrato.
 
         Args:
+            cnn_structure: stringa che indica il nome della CNN da addestrare
+            data_augmentation: bit che indica se effettuare o meno data augmentation sui 3 set di dati
             device: stringa che indica il device da usare ("cpu", "cuda:0", "cuda:1", ...)
         """
 
@@ -77,8 +80,6 @@ class Classifier:
 
         self.num_outputs = 10   # 10 classi mutuamente esclusive
         self.device = torch.device(device)  # device in cui saranno spostati i dati
-        self.preprocess_train = None    # operazioni di pre-processamento dei dati (per il training)
-        self.preprocess_eval = [None, None, None, None]     # operazioni di pre-processamento dei dati (per validation e testing)
 
         # Creazione della rete
         if cnn_structure is not None and cnn_structure == 'cnn1':
@@ -116,36 +117,27 @@ class Classifier:
                 nn.Linear(128, self.num_outputs),
             )
 
-        if data_augmentation:
+        # Data augmentation sui dati per il training -> rotazione random (25,-25) gradi e trasformazione di scala tra (0.95,1.05)
+        self.preprocess_train = transforms.Compose([
+            transforms.RandomAffine(degrees=25, scale=(0.95, 1.05)),
+            transforms.ToTensor(),  # passaggio da PIL a tensore e normalizzazione tra (0,1)
+        ])
 
-            # Data augmentation sui dati per il training -> rotazione random (25,-25) gradi e trasformazione di scala tra (0.95,1.05)
-
-            self.preprocess_train = transforms.Compose([
-                transforms.RandomAffine(degrees=25, scale=(0.95, 1.05)),
-                transforms.ToTensor(),  # passaggio da PIL a tensore e normalizzazione tra (0,1)
-            ])
-
-            # Data augmentation sui dati per il validation e per il test (qua sono trasformazioni fisse)
-
-            self.preprocess_eval = [transforms.ToTensor(),
-                                    transforms.Compose([
-                                        transforms.RandomRotation(degrees=(15, 15)),
-                                        transforms.ToTensor(),
-                                    ]),
-                                    transforms.Compose([
-                                        transforms.RandomRotation(degrees=(-15, -15)),
-                                        transforms.ToTensor(),
-                                    ]),
-                                    transforms.Compose([
-                                        transforms.RandomAffine(degrees=0, scale=(1.05, 1.05)),
-                                        transforms.ToTensor(),
-                                    ])
-                                    ]
-
-        else:   # nessuna trasformazione sui dati oltre alla normalizzazione
-
-            self.preprocess_train = [transforms.ToTensor()]
-            self.preprocess_eval = [transforms.ToTensor()]
+        # Data augmentation sui dati per il validation e per il test (qua sono trasformazioni fisse)
+        self.preprocess_eval = [transforms.ToTensor(),
+                                transforms.Compose([
+                                    transforms.RandomRotation(degrees=(15, 15)),
+                                    transforms.ToTensor(),
+                                ]),
+                                transforms.Compose([
+                                    transforms.RandomRotation(degrees=(-15, -15)),
+                                    transforms.ToTensor(),
+                                ]),
+                                transforms.Compose([
+                                    transforms.RandomAffine(degrees=0, scale=(1.05, 1.05)),
+                                    transforms.ToTensor(),
+                                ])
+                                ]
 
         # Spostamento della rete nella memoria del dispositivo corretto
         self.net.to(self.device)
@@ -189,29 +181,38 @@ class Classifier:
 
         return predictions
 
+    def compute_accuracy(self, predictions, labels):
+        """Calcola la precisione della rete rispetto alle classi corrette
+
+        Args:
+            predictions: Tensore 1D con le predizioni della rete
+            labels: Tensore 1D con le predizioni corrette
+
+        Returns:
+            accuracy: percentuale di predizioni corrette
+        """
+        correct = torch.sum(predictions==labels)   # conteggio predizioni corrette
+        accuracy = float(correct*100.0/len(labels))  # percentuale predizioni corrette
+        accuracy = round(accuracy, 4)
+
+        return accuracy
+
     # FUNZIONE DI VALUTAZIONE DEL MODELLO
 
     def eval_classifier(self, data_set):
-        """Valuta le prestazioni del modello su un validation set di (40k esempi) composto da 4 subset a loro volta
-        composti da 10k esempi presi dal training set su cui vengono fatte 4 trasformazioni fisse (una per ciascun subset):
+        """Valuta le prestazioni del modello su un set di dati. Se richiesta data augmentation, considera tutte le versioni del set
+        che ne derivano valutando le prestazioni sul set composto da queste diverse versioni."""
 
-        subset 0: Nessuna trasformazione oltre il passaggio da PIL a tensore (con normalizzazione)
-        subset 1: Rotazione di 15 gradi e passaggio da PIL a tensore (con normalizzazione)
-        subset 2: Rotazione di -15 gradi e passaggio da PIL a tensore (con normalizzazione)
-        subset 3: Trasformazione di scala di 0.95 e passaggio da PIL a tensore (con normalizzazione)
-
-        """
-
-        # Inizializzazione elementi
+        # Inizializzazione variabili utili
         tot_predictions = []    # contenitore di tutte le predizioni fatte dalla rete
-        tot_labels = []     # contenitore di tutte le labels
+        tot_labels = []     # contenitore di tutte le labels corrette
 
-        # Ciclo sui subset che comporranno il validation set
-        for subset in range(len(self.preprocess_eval)):
+        # Ciclo sulla lista contenente le trasformazioni da fare sul set
+        for t in range(len(self.preprocess_eval)):
 
-            data_set.dataset.transform = self.preprocess_eval[subset]  # applica la trasformazione sui dati
+            data_set.dataset.transform = self.preprocess_eval[t]  # applica la trasformazione sui dati
 
-            # Ciclo sui batch di dati (batch-mode)
+            # Ciclo sui batch di dati
             for i, (images, labels) in enumerate(data_set):
 
                 # Spostamento dei dati nel dispositivo corretto
@@ -223,14 +224,8 @@ class Classifier:
                 tot_predictions.append(predictions.cpu())   # aggiunta predizioni sul batch attuale alle altre
                 tot_labels.append(labels)   # aggiunta labels sul batch attuale alle altre
 
-                # predictions = predictions.to(device='cuda:0')
-                # correct += torch.sum(predictions == labels)  # incremento del totale delle predizioni corrette
-                # tot_examples += output_net_no_act.size(0)  # incremento del totale degli esempi presentati
-
         # Calcolo precisione
         dataset_accuracy = self.compute_accuracy(torch.cat(tot_predictions, 0), torch.cat(tot_labels, 0))
-
-        # accuracy = correct*100.0/tot_examples calcolo percentuale predizioni corrette sul 40k esempi totali
 
         # Ripristino dei dati alle trasformazioni casuali usate per il training
         data_set.dataset.transform = self.preprocess_train
@@ -241,6 +236,9 @@ class Classifier:
 
     def train_classifier(self, learning_rate, epochs):
         """"Addestramento del classificatore con i dati per training e validation."""
+
+        # Trasformazione sul training set
+        #train_dataloader.dataset.dataset.transform = self.preprocess_train
 
         # Inizializzazione variabili utili
         best_epoch = -1     # epoca in cui è stata ottenuta la precisione maggiore
@@ -334,22 +332,6 @@ class Classifier:
         # #plt.plot(losses)
         # #plt.show()
         # plt.savefig('plots.pdf')    # salvataggio grafici in formato pdf
-
-    def compute_accuracy(self, predictions, labels):
-        """Calcola la precisione della rete rispetto alle classi corrette
-
-        Args:
-            predictions: Tensore 1D con le predizioni della rete
-            labels: Tensore 1D con le predizioni corrette
-
-        Returns:
-            accuracy: percentuale di predizioni corrette
-        """
-        correct = torch.sum(predictions==labels)   # conteggio predizioni corrette
-        accuracy = float(correct*100.0/len(labels))  # percentuale predizioni corrette
-        accuracy = round(accuracy, 4)
-
-        return accuracy
 
 
     # FUNZIONE DI SEGMENTAZIONE IMMAGINI
@@ -515,8 +497,8 @@ if __name__ == "__main__":
                         help="Specificare la modalità tra: addestramento(train), valutazione(eval), predizione su immagini(eval_pics)")
     parser.add_argument('--cnn_structure', type=str, default='cnn1', choices=['cnn1', 'cnn2'],
                         help='Specificare il modello da usare (default: cnn1)')
-    parser.add_argument('--data_augmentation', type=int, default=1, choices=[1, 0],
-                        help='Specificare se applicare trasformazioni sui dati')
+    # parser.add_argument('--data_augmentation', type=int, default=1, choices=[1, 0],
+    #                     help='Specificare se applicare trasformazioni sui dati (default=1)')
     parser.add_argument("--lr", type=float, default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
     parser.add_argument("--epochs", type=int, default=10, help="Specificare il numero di epoche per l'addestramento (default: 10)")
     parser.add_argument("--batch_size", type=int, default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
@@ -540,7 +522,7 @@ if __name__ == "__main__":
 
     val_dataloader = DataLoader(val_data,
                                 batch_size=BATCH_SIZE,
-                                shuffle=True)
+                                shuffle=False)
 
     test_dataloader = DataLoader(test_data,
                                  batch_size=10000,
@@ -560,7 +542,7 @@ if __name__ == "__main__":
         print('Training classifier...')
 
         # Creazione di un nuovo classificatore
-        classificatore = Classifier(args.cnn_structure, args.data_augmentation, args.device)
+        classificatore = Classifier(args.cnn_structure, args.device)
 
         # Addestramento del classificatore
         classificatore.train_classifier(LR, EPOCHS)
@@ -578,13 +560,17 @@ if __name__ == "__main__":
         # print('Accuracy sul training set: ', round(train_acc.item(), 2), '%')
         print('Accuracy sul validation set: ', round(val_acc, 2), '%')
         print('Accuracy sul test set: ', round(test_acc, 2), '%')
+        print(classificatore.eval_classifier(val_dataloader))
+        print(classificatore.eval_classifier(val_dataloader))
+        print(classificatore.eval_classifier(val_dataloader))
+        print(classificatore.eval_classifier(val_dataloader))
 
     elif args.mode == 'eval':
 
         print('Valutazione classificatore...')
 
         # Creazione nuovo classificatore
-        classificatore = Classifier(args.cnn_structure, args.data_augmentation, args.device)
+        classificatore = Classifier(args.cnn_structure, args.device)
 
         # Caricamento classificatore
         classificatore.load('classificatore.pth')
@@ -604,7 +590,7 @@ if __name__ == "__main__":
             print('Predizione delle immagini nella cartella: ', args.folder)
 
             # Creazione nuovo classificatore
-            classificatore = Classifier(args.cnn_structure, args.data_augmentation, args.device)
+            classificatore = Classifier(args.cnn_structure, args.device)
 
             # Caricamento classificatore
             classificatore.load('classificatore.pth')
