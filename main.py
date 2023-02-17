@@ -4,19 +4,15 @@ Topic: Recognize Handwritten (Long) Numbers
 Author: Valerio Felici (valerio.felici@student.unisi.it)
 """
 
-import copy
-import numpy as np
+import os
 import torch
-import torchvision
 import argparse
 import torch.nn as nn
 import matplotlib.pyplot as plt
-from torchvision import datasets, transforms
+from torchvision import transforms
 from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
-from torch.utils.data import DataLoader, random_split, IterableDataset, TensorDataset
-from torch import optim
-import os
+from torch.utils.data import DataLoader, random_split
 from PIL import Image, ImageOps
 
 # Parametri che verranno specificati da linea di comando
@@ -181,7 +177,8 @@ class Classifier:
 
         return predictions
 
-    def compute_accuracy(self, predictions, labels):
+    @staticmethod
+    def compute_accuracy(predictions, labels):
         """Calcola la precisione della rete rispetto alle classi corrette
 
         Args:
@@ -200,35 +197,45 @@ class Classifier:
     # FUNZIONE DI VALUTAZIONE DEL MODELLO
 
     def eval_classifier(self, data_set):
-        """Valuta le prestazioni del modello su un set di dati. Se richiesta data augmentation, considera tutte le versioni del set
-        che ne derivano valutando le prestazioni sul set composto da queste diverse versioni."""
+        """Valuta le prestazioni del modello su un set di dati. Considera tutte le versioni del set
+        che ne derivano dalle diverse trasformazioni valutando le prestazioni sul set composto da queste diverse versioni."""
+
+        # Controllo se il classificatore sia in train mode, se si, passa a eval mode
+        is_train = self.net.training  # assume valore 1 se è in modalità addestramento
+        if is_train:
+            self.net.eval()  # passaggio a modalità valutazione
 
         # Inizializzazione variabili utili
-        tot_predictions = []    # contenitore di tutte le predizioni fatte dalla rete
-        tot_labels = []     # contenitore di tutte le labels corrette
+        tot_predictions = []  # contenitore di tutte le predizioni fatte dalla rete
+        tot_labels = []  # contenitore di tutte le labels corrette
 
-        # Ciclo sulla lista contenente le trasformazioni da fare sul set
-        for t in range(len(self.preprocess_eval)):
+        with torch.no_grad():  # disabilità il calcolo del gradiente in questa fase
 
-            data_set.dataset.transform = self.preprocess_eval[t]  # applica la trasformazione sui dati
+            # Ciclo sulla lista contenente le trasformazioni da fare sul set
+            for t in range(len(self.preprocess_eval)):
 
-            # Ciclo sui batch di dati
-            for i, (images, labels) in enumerate(data_set):
+                data_set.dataset.transform = self.preprocess_eval[t]  # applica la trasformazione sui dati
 
-                # Spostamento dei dati nel dispositivo corretto
-                images = images.to(self.device)
-                # labels = labels.to(self.device)
+                # Ciclo sui batch di dati
+                for i, (images, labels) in enumerate(data_set):
+                    # Spostamento dei dati nel dispositivo corretto
+                    images = images.to(self.device)
+                    labels = labels.to(self.device)  # serve????????
 
-                output_net_no_act, output_net = self.forward(images)    # calcolo output della rete sul batch di dati
-                predictions = self.decision(output_net)   # predizioni della rete sul batch
-                tot_predictions.append(predictions.cpu())   # aggiunta predizioni sul batch attuale alle altre
-                tot_labels.append(labels)   # aggiunta labels sul batch attuale alle altre
+                    output_net_no_act, output_net = self.forward(images)  # calcolo output della rete sul batch di dati
+                    predictions = self.decision(output_net)  # predizioni della rete sul batch
+                    tot_predictions.append(predictions)  # aggiunta predizioni sul batch attuale alle altre???? predictions.cpu()??
+                    tot_labels.append(labels)  # aggiunta labels sul batch attuale alle altre
 
         # Calcolo precisione
         dataset_accuracy = self.compute_accuracy(torch.cat(tot_predictions, 0), torch.cat(tot_labels, 0))
 
         # Ripristino dei dati alle trasformazioni casuali usate per il training
         data_set.dataset.transform = self.preprocess_train
+
+        # Ripristino della modalità alla quale era il classificatore
+        if is_train:
+            self.net.train()
 
         return dataset_accuracy
 
@@ -237,16 +244,11 @@ class Classifier:
     def train_classifier(self, learning_rate, epochs):
         """"Addestramento del classificatore con i dati per training e validation."""
 
-        # Trasformazione sul training set
-        #train_dataloader.dataset.dataset.transform = self.preprocess_train
-
         # Inizializzazione variabili utili
         best_epoch = -1     # epoca in cui è stata ottenuta la precisione maggiore
         best_accuracy = -1  # precisione maggiore ottenuta
         accuracy = -1   # memorizza il valore della percentuale di precisione ottenuta
         accuracies = []  # memorizza le percentuali di precisione ottenute nell'addestramento
-
-        #self.net.to(self.device)  # ???????????????????
 
         # assicura che la rete sia in 'modalità addestramento' (PyTorch)
         self.net.train()
@@ -256,8 +258,6 @@ class Classifier:
 
         # Loss function  (Cross Entropy Loss)
         criterion = nn.CrossEntropyLoss()
-        batch_loss = []     # loss relativo al batch
-        epoch_loss = []     # loss relativo all'epoca
 
         # Ciclo sulle epoche
         for e in range(epochs):
@@ -282,7 +282,6 @@ class Classifier:
 
                 # Calcolo della loss function
                 loss = criterion(output_net_no_act, labels)   # calcolo loss tra output della rete e classi corrette
-                #batch_loss.append(loss.item())
 
                 # Calcolo gradienti e aggiornamento dei pesi della rete
                 optimizer.zero_grad()   # azzeramento aree di memoria in cui erano stati inseriti i gradienti calcolati in precedenza
@@ -291,6 +290,7 @@ class Classifier:
 
                 # Calcolo prestazioni rete sul mini-batch per il training corrente
                 with torch.no_grad():
+
                     self.net.eval()  # passaggio alla modalità di valutazione
 
                     # Calcolo prestazioni sul batch
@@ -303,8 +303,6 @@ class Classifier:
 
                     self.net.train()    # ritorno alla modalità di training
 
-                    #print('mini batch:\t LOSS:', loss.item(), 'train accuracy: ', batch_train_acc)
-
             val_accuracy = self.eval_classifier(val_dataloader)  # precisione sul validation set
 
             epoch_train_loss /= epoch_train_examples
@@ -312,7 +310,7 @@ class Classifier:
 
             # Stampa statistiche ottenute sull'epoca
             print("Epoca: ", e + 1, "\nPrecisione on Train: ", epoch_train_acc, "%")
-            print('Loss on Train: ', epoch_train_loss)
+            print('Loss on Train: ', round(epoch_train_loss, 3))
             print('Precisione sul Validation: ', val_accuracy, '%')
 
             # Controllo che sia stato raggiunto il valore max della precisione tra quelli ottenuti fino ad adesso
@@ -333,7 +331,6 @@ class Classifier:
         # #plt.show()
         # plt.savefig('plots.pdf')    # salvataggio grafici in formato pdf
 
-
     # FUNZIONE DI SEGMENTAZIONE IMMAGINI
     def segment_image(self, image):
         """Segmenta l'immagine in tante immagini quante sono le cifre scritte a mano. Ogni immagine rappresenta l'area in cui è contenuta
@@ -345,6 +342,8 @@ class Classifier:
         Returns:
             sub_images: tensore contenente le sotto-immagini relative a ciascuna cifra
         """
+
+        self.net.eval()     # passaggio alla fase di valutazione
 
         # Apertura immagine
         immagine = Image.open(image)
@@ -359,8 +358,8 @@ class Classifier:
         pil_tensor = transforms.ToTensor()  # per la conversione da PIL a tensore (normalizzando tra 0 e 1)
         tensor_pil = transforms.ToPILImage()    # per la conversione da tensore a PIL
 
+        # Trasformazione sull'immagine
         immagine_tensore = pil_tensor(immagine)
-        #immagine_tensore = immagine_tensore / 255  # Normalizzazione tra 0 e 1
 
         # Inizializzazione variabili
         colonna = 0  # rappresenta la colonna relativa all'inizio dell'area in cui è contenuta una cifra (estremo sx area)
@@ -373,42 +372,37 @@ class Classifier:
         # Definizione variabile soglia
         soglia = 0.75  # soglia sotto la quale un pixel viene considerato spento
 
-        # Rimozione bianco sopra e sotto
+        # Rimozione parte vuota sopra e sotto l'immagine
         for i in range(immagine_tensore.size(1)):  # scorre le righe
 
             for j in range(immagine_tensore.size(2)):  # scorre le colonne
 
                 if (lim_sup == 0) & (immagine_tensore[0][i][j] > soglia):  # limite superiore trovato
-
                     lim_sup = i - 35
                     break
 
-                if (lim_sup != 0) & (immagine_tensore[0][i][j] > soglia):  # limite inferiore trovato
-
+                if (lim_sup != 0) & (immagine_tensore[0][i][j] > soglia):  # limite inferiore non trovato
                     break
 
-                if (lim_sup != 0) & (j == (immagine_tensore.size(2) - 1)):
+                if (lim_sup != 0) & (j == (immagine_tensore.size(2) - 1)):  # True se è stata trovata una riga senza pixel accesi
                     lim_inf = i + 35
                     end_number = 1
                     break
 
-            if end_number == 1:
+            if end_number == 1:  # esce dal ciclo se sono stati trovati i due limiti
                 break
 
         # Eliminazione bordi superiori e inferiori immagine
         immagine_tensore = immagine_tensore[:, lim_sup:lim_inf, :]
 
-        # Loop sui pixels dell'immagine, scorrendo per colonne
+        # Segmentazione di ogni singolo digit
         for j in range(immagine_tensore.size(2)):  # scorre le colonne
 
             for i in range(immagine_tensore.size(1)):  # scorre le righe
 
-                # if immagine[0][i][j] < 0.6:     # azzera i pixel poco luminosi (rumore?)
-                #     immagine[0][i][j] = 0
-
                 if (colonna == 0) & (immagine_tensore[0][i][j] > soglia):  # inizia il digit
                     # salva la colonna
-                    colonna = j - 35  # lascio un po' di spazio di pixels come bordo sx
+                    colonna = j - 35  # lascia un po' di spazio di pixels come bordo sx
                     break  # passa alla colonna successiva
 
                 if (colonna != 0) & (immagine_tensore[0][i][j] > soglia):  # non è finito il digit
@@ -416,25 +410,28 @@ class Classifier:
 
                 if (colonna != 0) & (immagine_tensore[0][i][j] < soglia) & (i == (immagine_tensore.size(1) - 1)):  # è finito il digit
                     count_cifre += 1  # incremento il contatore dei digit trovati
-                    # creazione sezione digit trovato
+                    # creazione area digit trovato
                     sub_images.append(immagine_tensore[0, :, colonna:j + 35])  # salvataggio del tensore relativo all'area trovata
                     colonna = 0  # si azzera una volta definito l'estremo dx dell'area della cifra
 
         digit = ''  # stringa che sarà composta dalle predizioni su ogni cifra
 
-        # Loop sulle sotto-immagini per passare da tensore a PIL, per passare alla dimensione (28x28) e tornare a tensore
+        # Loop sulle sotto-immagini identificate )per passare da tensore a PIL, per passare alla dimensione (28x28) e tornare a tensore
         for i in range(len(sub_images)):
-            sub_images[i] = tensor_pil(sub_images[i])
-            sub_images[i] = sub_images[i].resize((28, 28))
+
+            sub_images[i] = tensor_pil(sub_images[i])   # tensore -> PIL
+            sub_images[i] = sub_images[i].resize((28, 28))  # ridimensionamento a immagine (28x28)
+            #plt.imshow(sub_images[i], cmap='gray')     # visualizza immagine digit
+            #plt.show()
+            sub_images[i] = pil_tensor(sub_images[i])   # PIL -> tensore
+
+            if folder_name == 'foto':   # controlla se la cartella è quella con le foto reali (foto scattate da cellulare)
+                sub_images[i] = blacken_pixel(sub_images[i])  # annerimento pixels sotto una certa soglia definita nel metodo
+
+            #sub_images[i] = tensor_pil(sub_images[i])
             #plt.imshow(sub_images[i], cmap='gray')
             #plt.show()
-            sub_images[i] = pil_tensor(sub_images[i])
-            # sub_images[i] = sub_images[i] / 255  # normalizzazione tra 0 e 1
-            #sub_images[i] = blacken_pixel(sub_images[i])  # annerimento pixels sotto la soglia 0.6
-            sub_images[i] = tensor_pil(sub_images[i])
-            plt.imshow(sub_images[i], cmap='gray')
-            plt.show()
-            sub_images[i] = pil_tensor(sub_images[i])
+            #sub_images[i] = pil_tensor(sub_images[i])
             # plt.imshow(sub_images[i], cmap='gray')
             # plt.show()
             # print(sub_images[i].size())
@@ -442,11 +439,13 @@ class Classifier:
             # plt.imshow(sub_images[i], cmap='gray')
             # plt.show()
             # sub_images[i] = pil_tensor(sub_images[i])
-            print(sub_images[i].size())
+            #print(sub_images[i].size())
 
-            a, b = self.forward(sub_images[i][None, :, :])
-            d = torch.argmax(b, dim=1).item()
-            digit += str(d)
+            sub_images[i] = sub_images[i].to(self.device)  # spostamento nel dispositivo corretto
+            output_net_no_act, output_net = self.forward(sub_images[i][None, :, :])
+            prediction = self.decision(output_net)
+            #d = torch.argmax(b, dim=1).item()
+            digit += str(prediction.item())
 
         # print("\n\nIl numero in foto è: ", int(digit))
 
@@ -461,11 +460,14 @@ class Classifier:
 
         """
 
+        self.net.eval()    # passaggio alla fase di valutazione
+
         pics_list = next(os.walk(cartella))[2]  # lista contenente i nomi delle immagini nella cartella
         print('La cartella contiene le seguenti immagini:', pics_list)
 
         # Loop sulle immagini
         for i in range(len(pics_list)):
+
             digit = self.segment_image(cartella + '/' + pics_list[i])
             print('Il numero scritto nella foto', pics_list[i], 'è:', digit)
 
@@ -487,7 +489,7 @@ def blacken_pixel(image):
 
     return image
 
- 
+
 # ENTRY POINT
 if __name__ == "__main__":
 
@@ -502,7 +504,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
     parser.add_argument("--epochs", type=int, default=10, help="Specificare il numero di epoche per l'addestramento (default: 10)")
     parser.add_argument("--batch_size", type=int, default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
-    parser.add_argument("--device", choices=['cpu', 'cuda'], default='cpu', help='Specificare il device da usare (default:cpu)')
+    parser.add_argument("--device", choices=['cpu', 'gpu'], default='cpu', help='Specificare il device da usare (default:cpu)')
     parser.add_argument('--folder', type=str, default=None,
                         help='Specificare il nome della cartella in cui sono contenute le immagini (default: None)')
     args = parser.parse_args()
@@ -525,11 +527,11 @@ if __name__ == "__main__":
                                 shuffle=False)
 
     test_dataloader = DataLoader(test_data,
-                                 batch_size=10000,
+                                 batch_size=BATCH_SIZE,
                                  shuffle=False)
 
     # Selezione del device corretto
-    if (args.device == 'cuda') & (torch.cuda.is_available()):
+    if (args.device == 'gpu') & (torch.cuda.is_available()):
         device = 'cuda:0'
         print('\nDevice: GPU')
     else:
@@ -542,7 +544,7 @@ if __name__ == "__main__":
         print('Training classifier...')
 
         # Creazione di un nuovo classificatore
-        classificatore = Classifier(args.cnn_structure, args.device)
+        classificatore = Classifier(args.cnn_structure, device)
 
         # Addestramento del classificatore
         classificatore.train_classifier(LR, EPOCHS)
@@ -570,7 +572,7 @@ if __name__ == "__main__":
         print('Valutazione classificatore...')
 
         # Creazione nuovo classificatore
-        classificatore = Classifier(args.cnn_structure, args.device)
+        classificatore = Classifier(args.cnn_structure, device)
 
         # Caricamento classificatore
         classificatore.load('classificatore.pth')
@@ -583,6 +585,8 @@ if __name__ == "__main__":
 
     elif args.mode == 'eval_pics':
 
+        folder_name = args.folder
+
         if args.folder is None:
             print('SPECIFICARE IL NOME DELLA CARTELLA IN CUI SONO CONTENUTE LE IMMAGINI! -> --folder=folder_name in the command line')
 
@@ -590,7 +594,7 @@ if __name__ == "__main__":
             print('Predizione delle immagini nella cartella: ', args.folder)
 
             # Creazione nuovo classificatore
-            classificatore = Classifier(args.cnn_structure, args.device)
+            classificatore = Classifier(args.cnn_structure, device)
 
             # Caricamento classificatore
             classificatore.load('classificatore.pth')
@@ -627,28 +631,4 @@ if __name__ == "__main__":
     # for i in range(28):
     #     for j in range(28):
     #         if (new_image2[0][i][j] < 0.6) | (i < 2 | i > 25) | (j < 2 | j > 25):
-    #             new_image2[0][i][j] = 0
     #
-    # conv2 = transforms.ToPILImage()
-    # new_image3 = conv2(new_image2)
-    # plt.imshow(new_image3, cmap='gray')
-    # plt.show()
-    # a, b = c.forward(new_image2[None, :, :])
-    # print("\nIl numero disegnato è: ", torch.argmax(b, dim=1).item())
-
-    # risultati = segment_image("long6312.jpeg")
-    # digit = ""
-    #
-    # conv = transforms.ToPILImage()
-    #
-    # for i in range(len(risultati)):
-    #     a, b = c.forward(risultati[i][None, :, :])
-    #     d = torch.argmax(b, dim=1).item()
-    #     digit += str(d)
-    #     risultati[i] = conv(risultati[i])
-    #     plt.imshow(risultati[i], cmap='gray')
-    #     plt.show()
-    #
-    # print("\n\nIl numero in foto è: ", int(digit))
-
-
