@@ -44,7 +44,7 @@ def download_data(folder):
     training_set = MNIST(root=folder,   # cartella di destinazione
                          train=True,    # dati per il train
                          download=True,
-                         transform=training_data_transform
+                         transform=ToTensor()
                          )
 
     test_set = MNIST(root=folder,
@@ -188,9 +188,9 @@ class Classifier:
         Returns:
             accuracy: percentuale di predizioni corrette
         """
-        correct = torch.sum(predictions==labels)   # conteggio predizioni corrette
-        accuracy = float(correct*100.0/len(labels))  # percentuale predizioni corrette
-        accuracy = round(accuracy, 4)
+
+        correct = torch.sum(predictions==labels).item()   # conteggio predizioni corrette
+        accuracy = correct*100.0/len(labels)  # percentuale predizioni corrette
 
         return accuracy
 
@@ -201,7 +201,7 @@ class Classifier:
         che ne derivano dalle diverse trasformazioni valutando le prestazioni sul set composto da queste diverse versioni."""
 
         # Controllo se il classificatore sia in train mode, se si, passa a eval mode
-        is_train = self.net.training  # assume valore 1 se è in modalità addestramento
+        is_train = self.net.training  # assume valore True se è in modalità addestramento
         if is_train:
             self.net.eval()  # passaggio a modalità valutazione
 
@@ -245,12 +245,11 @@ class Classifier:
         """"Addestramento del classificatore con i dati per training e validation."""
 
         # Inizializzazione variabili utili
-        best_epoch = -1     # epoca in cui è stata ottenuta la precisione maggiore
         best_accuracy = -1  # precisione maggiore ottenuta
-        accuracy = -1   # memorizza il valore della percentuale di precisione ottenuta
-        accuracies = []  # memorizza le percentuali di precisione ottenute nell'addestramento
+        val_accuracy = -1   # memorizza il valore della percentuale di precisione ottenuta
+        val_accuracies = []  # memorizza le percentuali di precisione ottenute nell'addestramento
 
-        # assicura che la rete sia in 'modalità addestramento' (PyTorch)
+        # Controllo che la rete sia in modalità training
         self.net.train()
 
         # Creazione ottimizzatore (Adam)
@@ -258,6 +257,9 @@ class Classifier:
 
         # Loss function  (Cross Entropy Loss)
         criterion = nn.CrossEntropyLoss()
+
+        # Data augmentation
+        train_dataloader.dataset.transform = self.preprocess_train
 
         # Ciclo sulle epoche
         for e in range(epochs):
@@ -308,16 +310,23 @@ class Classifier:
             epoch_train_loss /= epoch_train_examples
             epoch_train_acc /= epoch_train_examples
 
+            val_accuracies.append(val_accuracy)     # riempimento lista con le accuracies ottenute in ogni epoca
+
             # Stampa statistiche ottenute sull'epoca
-            print("Epoca: ", e + 1, "\nPrecisione on Train: ", epoch_train_acc, "%")
-            print('Loss on Train: ', round(epoch_train_loss, 3))
-            print('Precisione sul Validation: ', val_accuracy, '%')
+            print("Epoca: ", e + 1, "\nPrecisione nel training: ", epoch_train_acc, "%")
+            print('Loss nel training: ', round(epoch_train_loss, 3))
+            print('Precisione sul validation: ', val_accuracy, '%')
+
+            print(self.eval_classifier(val_dataloader))
+            print(self.eval_classifier(val_dataloader))
+            print(self.eval_classifier(val_dataloader))
+
 
             # Controllo che sia stato raggiunto il valore max della precisione tra quelli ottenuti fino ad adesso
             if val_accuracy > best_accuracy:
                 self.save("classificatore.pth")  # salvataggio del modello (è il miglior ottenuto fin qui)
                 best_accuracy = val_accuracy  # aggiornamento del valore più alto di precisione ottenuto
-                print("Salvataggio del miglior modello: ", val_accuracy, "% \n")
+                print("Salvataggio del miglior modello: ", best_accuracy, "% \n")
 
         # Stampa dei grafici relativi a precisione e loss
         # fig, axs = plt.subplots(2)
@@ -499,8 +508,6 @@ if __name__ == "__main__":
                         help="Specificare la modalità tra: addestramento(train), valutazione(eval), predizione su immagini(eval_pics)")
     parser.add_argument('--cnn_structure', type=str, default='cnn1', choices=['cnn1', 'cnn2'],
                         help='Specificare il modello da usare (default: cnn1)')
-    # parser.add_argument('--data_augmentation', type=int, default=1, choices=[1, 0],
-    #                     help='Specificare se applicare trasformazioni sui dati (default=1)')
     parser.add_argument("--lr", type=float, default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
     parser.add_argument("--epochs", type=int, default=10, help="Specificare il numero di epoche per l'addestramento (default: 10)")
     parser.add_argument("--batch_size", type=int, default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
@@ -560,8 +567,8 @@ if __name__ == "__main__":
 
         # Stampa risultati ottenuti sui 3 dataset
         # print('Accuracy sul training set: ', round(train_acc.item(), 2), '%')
-        print('Accuracy sul validation set: ', round(val_acc, 2), '%')
-        print('Accuracy sul test set: ', round(test_acc, 2), '%')
+        print('Accuracy sul validation set: ', val_acc, '%')
+        print('Accuracy sul test set: ', test_acc, '%')
         print(classificatore.eval_classifier(val_dataloader))
         print(classificatore.eval_classifier(val_dataloader))
         print(classificatore.eval_classifier(val_dataloader))
