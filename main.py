@@ -63,7 +63,7 @@ def download_data(folder):
 class Classifier:
     """Classificatore per la predizione su immagini di numeri scritti a mano."""
 
-    def __init__(self, cnn_structure='cnn1', device="cpu"):
+    def __init__(self, cnn_structure='cnn1', device='cpu'):
         """Crea un classificatore non addestrato.
 
         Args:
@@ -155,7 +155,7 @@ class Classifier:
     # FUNZIONE PER IL CALCOLO DELL'OUTPUT DELLA RETE
 
     def forward(self, x):
-        """Calcola l'output della rete"""
+        """Calcola l'output della rete."""
 
         output_net_no_act = self.net(x)  # output della rete senza attivazione
         output_net = torch.softmax(output_net_no_act, dim=1)    # output applicando la funzione di attivazione (softmax)
@@ -179,7 +179,7 @@ class Classifier:
 
     @staticmethod
     def compute_accuracy(predictions, labels):
-        """Calcola la precisione della rete rispetto alle classi corrette
+        """Calcola la precisione della rete rispetto alle classi corrette.
 
         Args:
             predictions: Tensore 1D con le predizioni della rete
@@ -220,7 +220,7 @@ class Classifier:
                 for i, (images, labels) in enumerate(data_set):
                     # Spostamento dei dati nel dispositivo corretto
                     images = images.to(self.device)
-                    labels = labels.to(self.device)  # serve????????
+                    labels = labels.to(self.device)  # serve ????????
 
                     output_net_no_act, output_net = self.forward(images)  # calcolo output della rete sul batch di dati
                     predictions = self.decision(output_net)  # predizioni della rete sul batch
@@ -313,20 +313,19 @@ class Classifier:
             val_accuracies.append(val_accuracy)     # riempimento lista con le accuracies ottenute in ogni epoca
 
             # Stampa statistiche ottenute sull'epoca
-            print("Epoca: ", e + 1, "\nPrecisione nel training: ", epoch_train_acc, "%")
-            print('Loss nel training: ', round(epoch_train_loss, 3))
+            print('Epoca: ', e + 1, '\nPrecisione sul training: ', epoch_train_acc, '%')
+            print('Loss sul training: ', round(epoch_train_loss, 3))
             print('Precisione sul validation: ', val_accuracy, '%')
-
-            print(self.eval_classifier(val_dataloader))
-            print(self.eval_classifier(val_dataloader))
-            print(self.eval_classifier(val_dataloader))
-
+            #
+            # print(self.eval_classifier(val_dataloader))
+            # print(self.eval_classifier(val_dataloader))
+            # print(self.eval_classifier(val_dataloader))
 
             # Controllo che sia stato raggiunto il valore max della precisione tra quelli ottenuti fino ad adesso
             if val_accuracy > best_accuracy:
-                self.save("classificatore.pth")  # salvataggio del modello (è il miglior ottenuto fin qui)
+                self.save('classificatore_cnn2.pth')  # salvataggio del modello (è il miglior ottenuto fin qui)
                 best_accuracy = val_accuracy  # aggiornamento del valore più alto di precisione ottenuto
-                print("Salvataggio del miglior modello: ", best_accuracy, "% \n")
+                print('Salvataggio del miglior modello... \n')
 
         # Stampa dei grafici relativi a precisione e loss
         # fig, axs = plt.subplots(2)
@@ -368,32 +367,32 @@ class Classifier:
         tensor_pil = transforms.ToPILImage()    # per la conversione da tensore a PIL
 
         # Trasformazione sull'immagine
-        immagine_tensore = pil_tensor(immagine)
+        image_tensor = pil_tensor(immagine)
 
         # Inizializzazione variabili
-        colonna = 0  # rappresenta la colonna relativa all'inizio dell'area in cui è contenuta una cifra (estremo sx area)
-        count_cifre = 0  # contatore delle cifre individuate nell'immagine
+        column = 0  # rappresenta la colonna relativa all'inizio dell'area in cui è contenuta una cifra (estremo sx area)
+        count_digit = 0  # contatore delle cifre individuate nell'immagine
         sub_images = []  # tensore con le sotto-immagini relative a ciascuna cifra
         lim_sup = 0
         lim_inf = 0
         end_number = 0
 
         # Definizione variabile soglia
-        soglia = 0.75  # soglia sotto la quale un pixel viene considerato spento
+        threshold = 0.75  # soglia sotto la quale un pixel viene considerato spento
 
         # Rimozione parte vuota sopra e sotto l'immagine
-        for i in range(immagine_tensore.size(1)):  # scorre le righe
+        for i in range(image_tensor.size(1)):  # scorre le righe
 
-            for j in range(immagine_tensore.size(2)):  # scorre le colonne
+            for j in range(image_tensor.size(2)):  # scorre le colonne
 
-                if (lim_sup == 0) & (immagine_tensore[0][i][j] > soglia):  # limite superiore trovato
+                if (lim_sup == 0) & (image_tensor[0][i][j] > threshold):  # limite superiore trovato
                     lim_sup = i - 35
                     break
 
-                if (lim_sup != 0) & (immagine_tensore[0][i][j] > soglia):  # limite inferiore non trovato
+                if (lim_sup != 0) & (image_tensor[0][i][j] > threshold):  # limite inferiore non trovato
                     break
 
-                if (lim_sup != 0) & (j == (immagine_tensore.size(2) - 1)):  # True se è stata trovata una riga senza pixel accesi
+                if (lim_sup != 0) & (j == (image_tensor.size(2) - 1)):  # True se è stata trovata una riga senza pixel accesi
                     lim_inf = i + 35
                     end_number = 1
                     break
@@ -402,26 +401,26 @@ class Classifier:
                 break
 
         # Eliminazione bordi superiori e inferiori immagine
-        immagine_tensore = immagine_tensore[:, lim_sup:lim_inf, :]
+        image_tensor = image_tensor[:, lim_sup:lim_inf, :]
 
         # Segmentazione di ogni singolo digit
-        for j in range(immagine_tensore.size(2)):  # scorre le colonne
+        for j in range(image_tensor.size(2)):  # scorre le colonne
 
-            for i in range(immagine_tensore.size(1)):  # scorre le righe
+            for i in range(image_tensor.size(1)):  # scorre le righe
 
-                if (colonna == 0) & (immagine_tensore[0][i][j] > soglia):  # inizia il digit
+                if (column == 0) & (image_tensor[0][i][j] > threshold):  # inizia il digit
                     # salva la colonna
-                    colonna = j - 35  # lascia un po' di spazio di pixels come bordo sx
+                    column = j - 35  # lascia un po' di spazio di pixels come bordo sx
                     break  # passa alla colonna successiva
 
-                if (colonna != 0) & (immagine_tensore[0][i][j] > soglia):  # non è finito il digit
+                if (column != 0) & (image_tensor[0][i][j] > threshold):  # non è finito il digit
                     break  # passa alla colonna successiva
 
-                if (colonna != 0) & (immagine_tensore[0][i][j] < soglia) & (i == (immagine_tensore.size(1) - 1)):  # è finito il digit
-                    count_cifre += 1  # incremento il contatore dei digit trovati
+                if (column != 0) & (image_tensor[0][i][j] < threshold) & (i == (image_tensor.size(1) - 1)):  # è finito il digit
+                    count_digit += 1  # incremento il contatore dei digit trovati
                     # creazione area digit trovato
-                    sub_images.append(immagine_tensore[0, :, colonna:j + 35])  # salvataggio del tensore relativo all'area trovata
-                    colonna = 0  # si azzera una volta definito l'estremo dx dell'area della cifra
+                    sub_images.append(image_tensor[0, :, column:j + 35])  # salvataggio del tensore relativo all'area trovata
+                    column = 0  # si azzera una volta definito l'estremo dx dell'area della cifra
 
         digit = ''  # stringa che sarà composta dalle predizioni su ogni cifra
 
@@ -430,8 +429,8 @@ class Classifier:
 
             sub_images[i] = tensor_pil(sub_images[i])   # tensore -> PIL
             sub_images[i] = sub_images[i].resize((28, 28))  # ridimensionamento a immagine (28x28)
-            #plt.imshow(sub_images[i], cmap='gray')     # visualizza immagine digit
-            #plt.show()
+            plt.imshow(sub_images[i], cmap='gray')     # visualizza immagine digit
+            plt.show()
             sub_images[i] = pil_tensor(sub_images[i])   # PIL -> tensore
 
             if folder_name == 'foto':   # controlla se la cartella è quella con le foto reali (foto scattate da cellulare)
@@ -461,7 +460,7 @@ class Classifier:
         return digit
 
     # FUNZIONE PER LA PREDIZIONE DI CIFRE IN IMMAGINI PRESENTI IN UNA CARTELLA
-    def eval_pics(self, cartella):
+    def eval_pics(self, folder):
         """Effettua delle predizioni su immagini contenute in una cartella.
 
         Args:
@@ -471,28 +470,28 @@ class Classifier:
 
         self.net.eval()    # passaggio alla fase di valutazione
 
-        pics_list = next(os.walk(cartella))[2]  # lista contenente i nomi delle immagini nella cartella
+        pics_list = next(os.walk(folder))[2]  # lista contenente i nomi delle immagini nella cartella
         print('La cartella contiene le seguenti immagini:', pics_list)
 
         # Loop sulle immagini
         for i in range(len(pics_list)):
 
-            digit = self.segment_image(cartella + '/' + pics_list[i])
+            digit = self.segment_image(folder + '/' + pics_list[i])
             print('Il numero scritto nella foto', pics_list[i], 'è:', digit)
 
 
-# FUNZIONE DI ANNERIMENTO PIXELS ADDESSO SBIANCA!!!!
+# FUNZIONE DI ANNERIMENTO PIXEL
 def blacken_pixel(image):
-    """Annerisce i pixel dell'immagine in input che hanno un livello di luminosità sotto la soglia di 0.6."""
+    """Annerisce i pixel dell'immagine in input che hanno un livello di luminosità sotto la soglia di 0.5."""
 
-    soglia = 0.5    # soglia sotto la quale un pixel viene considerato spento
+    threshold = 0.5    # soglia sotto la quale un pixel viene considerato spento
 
     # Loop sui pixels dell'immagine (tensore con elementi compresi tra 0 e 1)
     for i in range(image.size(1)):
 
         for j in range(image.size(2)):
 
-            if image[0][i][j] < soglia:
+            if image[0][i][j] < threshold:
 
                 image[0][i][j] = 0
 
@@ -500,20 +499,23 @@ def blacken_pixel(image):
 
 
 # ENTRY POINT
-if __name__ == "__main__":
+if __name__ == '__main__':
 
     # Istruzioni da linea di comando
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=['train', 'eval', 'eval_pics'],
-                        help="Specificare la modalità tra: addestramento(train), valutazione(eval), predizione su immagini(eval_pics)")
+    parser.add_argument('mode', choices=['train', 'eval', 'eval_pics'],
+                        help='Specificare la modalità tra: addestramento(train), valutazione(eval), predizione su immagini(eval_pics)')
     parser.add_argument('--cnn_structure', type=str, default='cnn1', choices=['cnn1', 'cnn2'],
                         help='Specificare il modello da usare (default: cnn1)')
-    parser.add_argument("--lr", type=float, default=0.001, help="Specificare il learning rate per l'addestramento (default: 0.001)")
-    parser.add_argument("--epochs", type=int, default=10, help="Specificare il numero di epoche per l'addestramento (default: 10)")
-    parser.add_argument("--batch_size", type=int, default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
-    parser.add_argument("--device", choices=['cpu', 'gpu'], default='cpu', help='Specificare il device da usare (default:cpu)')
+    parser.add_argument('--lr', type=float, default=0.001, help='Specificare il learning rate per addestramento (default: 0.001)')
+    parser.add_argument('--epochs', type=int, default=10, help='Specificare il numero di epoche per addestramento (default: 10)')
+    parser.add_argument('--batch_size', type=int, default=64, help='Specificare la dimensione dei mini-batches (default: 64)')
+    parser.add_argument('--device', choices=['cpu', 'gpu'], default='cpu', help='Specificare il device da usare (default:cpu)')
     parser.add_argument('--folder', type=str, default=None,
                         help='Specificare il nome della cartella in cui sono contenute le immagini (default: None)')
+    parser.add_argument('--classifier', type=str, default='classificatore_cnn1.pth',
+                        choices=['classificatore_cnn1.pth', 'classificatore_cnn2.pth'],
+                        help='Specificare il modello addestrato da utilizzare (default: classificatore_cnn2.pth)')
     args = parser.parse_args()
 
     # VALUTAZIONI ISTRUZIONI DA LINEA DI COMANDO
@@ -522,7 +524,7 @@ if __name__ == "__main__":
     BATCH_SIZE = args.batch_size
 
     # DOWNLOAD DATASET MNIST NELLA CARTELLA 'dataset' SE NON GIA' PRESENTE
-    train_data, val_data, test_data = download_data("dataset")
+    train_data, val_data, test_data = download_data('dataset')
 
     # Conversione del dataset in data loaders
     train_dataloader = DataLoader(train_data,
@@ -557,7 +559,7 @@ if __name__ == "__main__":
         classificatore.train_classifier(LR, EPOCHS)
 
         # Caricamento del modello con cui sono stati ottenuti i risultati migliori sul validation_set
-        print('Addestramento completato, caricamento del miglior modello...')
+        print('\nAddestramento completato, caricamento del miglior modello...')
         classificatore.load('classificatore.pth')
 
         # Valutazione delle prestazioni del modello sui 3 dataset
@@ -569,73 +571,41 @@ if __name__ == "__main__":
         # print('Accuracy sul training set: ', round(train_acc.item(), 2), '%')
         print('Accuracy sul validation set: ', val_acc, '%')
         print('Accuracy sul test set: ', test_acc, '%')
-        print(classificatore.eval_classifier(val_dataloader))
-        print(classificatore.eval_classifier(val_dataloader))
-        print(classificatore.eval_classifier(val_dataloader))
-        print(classificatore.eval_classifier(val_dataloader))
 
     elif args.mode == 'eval':
 
         print('Valutazione classificatore...')
 
-        # Creazione nuovo classificatore
-        classificatore = Classifier(args.cnn_structure, device)
+        if args.classifier == 'classificatore_cnn1.pth':
+            classificatore = Classifier('cnn1', device)     # crea istanza di classificatore con la struttura cnn1
+        else:
+            classificatore = Classifier('cnn2', device)     # crea istanza di classificatore con la struttura cnn2
 
         # Caricamento classificatore
-        classificatore.load('classificatore.pth')
+        classificatore.load(args.classifier)
 
         # Valutazione del modello sul test set
         test_acc = classificatore.eval_classifier(test_dataloader)
 
         # Stampa risultati ottenuti
-        print('Accuracy sul test set: ', round(test_acc.item(), 2), '%')
+        print('Accuracy sul test set: ', round(test_acc, 2), '%')
 
     elif args.mode == 'eval_pics':
 
-        folder_name = args.folder
+        folder_name = args.folder   # nome cartella in cui sono contenuti le immagini
 
         if args.folder is None:
             print('SPECIFICARE IL NOME DELLA CARTELLA IN CUI SONO CONTENUTE LE IMMAGINI! -> --folder=folder_name in the command line')
-
         else:
             print('Predizione delle immagini nella cartella: ', args.folder)
 
-            # Creazione nuovo classificatore
-            classificatore = Classifier(args.cnn_structure, device)
+            if args.classifier == 'classificatore_cnn1.pth':
+                classificatore = Classifier('cnn1', device)  # crea istanza di classificatore con la struttura cnn1
+            else:
+                classificatore = Classifier('cnn2', device)  # crea istanza di classificatore con la struttura cnn2
 
             # Caricamento classificatore
-            classificatore.load('classificatore.pth')
+            classificatore.load(args.classifier)
 
             # Predizione sulle immagini
             classificatore.eval_pics(args.folder)
-
-
-    # c = Classifier()    # istanza di classificatore
-    # #c.train_classifier(0.001, 15)   # lr=0.001 epoche= 10
-    #
-    # c.load('classificatore.pth')
-    # cor = c.eval_classifier(test_dataloader)
-    # print(cor)
-
-    # Apertura immagine
-    # image = Image.open("difficile.jpeg")
-    #
-    # # Ridimensionamento immagine in 28x28
-    # new_image = image.resize((28, 28))
-    #
-    # # Conversione da RGB a Grayscale a un solo canale
-    # new_image1 = ImageOps.grayscale(new_image)
-    # new_image1 = ImageOps.invert(new_image1)
-    #
-    # new_image1.save(fp="nuovo.jpg")
-    # conv = transforms.PILToTensor()
-    # new_image2 = conv(new_image1)
-    # new_image2 = new_image2 / 255
-    # print(new_image2)
-    # plt.imshow(new_image1, cmap='gray')
-    # plt.show()
-    #
-    # for i in range(28):
-    #     for j in range(28):
-    #         if (new_image2[0][i][j] < 0.6) | (i < 2 | i > 25) | (j < 2 | j > 25):
-    #
