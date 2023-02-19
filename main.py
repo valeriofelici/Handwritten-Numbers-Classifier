@@ -462,8 +462,8 @@ if __name__ == '__main__':
     parser.add_argument('--folder', type=str, default=None,
                         help='Specificare il nome della cartella in cui sono contenute le immagini (default: None)')
     parser.add_argument('--classifier', type=str, default='classificatore_cnn1.pth',
-                        choices=['classificatore_cnn1.pth', 'classificatore_cnn2.pth'],
-                        help='Specificare il modello addestrato da utilizzare (default: classificatore_cnn2.pth)')
+                        choices=['classificatore_cnn1.pth', 'classificatore_cnn1.pth'],
+                        help='Specificare il modello addestrato da utilizzare (default: classificatore_cnn1.pth)')
     args = parser.parse_args()
 
     # VALUTAZIONI ISTRUZIONI DA LINEA DI COMANDO
